@@ -22,22 +22,29 @@ import {
   saveCart, 
   getUserAddress, 
   saveUserAddress, 
-  getUserRole, 
-  saveUserRole,
   getUserProfile,
   saveUserProfile,
   getSellerProfile,
   saveSellerProfile,
-  getMaxAllowedQuantityForDistance
+  getMaxAllowedQuantityForDistance,
+  saveCustomerSession,
+  getCustomerSession,
+  saveSellerSession,
+  getSellerSession,
+  clearAllSessions
 } from './services/storage';
 
 import { Header } from './components/Header';
+import { PromotionalHero } from './components/landing/PromotionalHero';
+import { AuthModal } from './components/auth/AuthModal';
+
 import { ProductCatalog } from './components/buyer/ProductCatalog';
 import { DistanceSelectorModal } from './components/buyer/DistanceSelectorModal';
 import { CartDrawer } from './components/buyer/CartDrawer';
 import { CheckoutModal } from './components/buyer/CheckoutModal';
 import { OrderTracker } from './components/buyer/OrderTracker';
 import { BuyerAccountModal } from './components/buyer/BuyerAccountModal';
+import { BuyerProfileView } from './components/buyer/BuyerProfileView';
 
 import { SellerDashboard } from './components/seller/SellerDashboard';
 import { ProductManagerModal } from './components/seller/ProductManagerModal';
@@ -58,9 +65,16 @@ const CATEGORIES: CategoryType[] = [
 ];
 
 export function App() {
-  const [role, setRoleState] = useState<'buyer' | 'seller'>('buyer');
-  const [activeTab, setActiveTab] = useState<'store' | 'orders' | 'dashboard' | 'products' | 'fulfillment' | 'policy'>('store');
+  // Authentication & Session State
+  const [authMode, setAuthMode] = useState<'guest' | 'customer' | 'seller'>('guest');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
+  const [authModalRole, setAuthModalRole] = useState<'customer' | 'seller'>('customer');
+
+  // Active navigation tab
+  const [activeTab, setActiveTab] = useState<'store' | 'orders' | 'dashboard' | 'products' | 'fulfillment' | 'policy' | 'profile'>('store');
   
+  // App Data
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -90,42 +104,81 @@ export function App() {
     }, 4000);
   };
 
-  // Load initial data
+  // Load initial data and restore sessions
   useEffect(() => {
     initializeStorage();
     setProducts(getProducts());
     setOrders(getOrders());
     setCart(getCart());
     setAddress(getUserAddress());
-    setUserProfile(getUserProfile());
-    setSellerProfile(getSellerProfile());
-    const storedRole = getUserRole();
-    setRoleState(storedRole);
-    if (storedRole === 'seller') {
+
+    // 1. Check Seller Session (sessionStorage - cleared on tab close)
+    const activeSeller = getSellerSession();
+    if (activeSeller) {
+      setSellerProfile(activeSeller);
+      setAuthMode('seller');
       setActiveTab('dashboard');
+      return;
     }
+
+    // 2. Check Customer Session (localStorage - 7 day expiration)
+    const activeCustomer = getCustomerSession();
+    if (activeCustomer) {
+      setUserProfile(activeCustomer);
+      setAuthMode('customer');
+      setActiveTab('store');
+      return;
+    }
+
+    // 3. Fallback to Guest Promotional View
+    setAuthMode('guest');
   }, []);
 
-  const handleRoleChange = (newRole: 'buyer' | 'seller') => {
-    setRoleState(newRole);
-    saveUserRole(newRole);
-    if (newRole === 'seller') {
-      setActiveTab('dashboard');
-    } else {
-      setActiveTab('store');
-    }
+  // --- AUTHENTICATION HANDLERS ---
+  const handleOpenLogin = (role: 'customer' | 'seller' = 'customer') => {
+    setAuthModalTab('login');
+    setAuthModalRole(role);
+    setIsAuthModalOpen(true);
   };
 
-  const handleOpenAccountModal = () => {
-    if (role === 'buyer') {
-      setIsBuyerAccountOpen(true);
-    } else {
-      setIsSellerAccountOpen(true);
-    }
+  const handleOpenRegister = (role: 'customer' | 'seller' = 'customer') => {
+    setAuthModalTab('register');
+    setAuthModalRole(role);
+    setIsAuthModalOpen(true);
   };
 
-  // Cart Functions
+  const handleCustomerLoginSuccess = (profile: UserProfile) => {
+    saveCustomerSession(profile);
+    setUserProfile(profile);
+    setAuthMode('customer');
+    setActiveTab('store');
+    addToast('success', `Welcome back, ${profile.name}! 7-Day Customer Session Active.`);
+  };
+
+  const handleSellerLoginSuccess = (profile: SellerProfile) => {
+    saveSellerSession(profile);
+    setSellerProfile(profile);
+    setAuthMode('seller');
+    setActiveTab('dashboard');
+    addToast('success', `Seller Authenticated! Active session bound to current browser tab.`);
+  };
+
+  const handleLogout = () => {
+    clearAllSessions();
+    setAuthMode('guest');
+    setIsBuyerAccountOpen(false);
+    setIsSellerAccountOpen(false);
+    addToast('info', 'Logged out successfully. Returned to promotional view.');
+  };
+
+  // --- CART FUNCTIONS ---
   const handleAddToCart = (product: Product, quantityToAdd = 1) => {
+    if (authMode !== 'customer') {
+      handleOpenLogin('customer');
+      addToast('info', 'Please log in as a customer to add items to your cart.');
+      return;
+    }
+
     const maxAllowed = getMaxAllowedQuantityForDistance(product, address.estimatedDistanceKm);
     const existingIndex = cart.findIndex((item) => item.product.id === product.id);
 
@@ -148,30 +201,33 @@ export function App() {
         addToast('warning', `Maximum allowed quantity for ${product.name} at ${address.estimatedDistanceKm}km is ${maxAllowed} ${product.unit}s.`);
         return;
       }
+
       updatedCart = [...cart, { product, quantity: quantityToAdd }];
     }
 
     setCart(updatedCart);
     saveCart(updatedCart);
-    addToast('success', `Added ${product.name} to cart!`);
+    addToast('success', `Added ${quantityToAdd} ${product.unit} of ${product.name} to cart.`);
   };
 
-  const handleUpdateCartQuantity = (productId: string, delta: number) => {
-    const updatedCart = cart
-      .map((item) => {
-        if (item.product.id === productId) {
-          const maxAllowed = getMaxAllowedQuantityForDistance(item.product, address.estimatedDistanceKm);
-          const newQty = item.quantity + delta;
-          if (newQty > maxAllowed && delta > 0) {
-            addToast('warning', `Maximum allowed quantity for this distance is ${maxAllowed}.`);
-            return item;
-          }
-          return { ...item, quantity: newQty };
-        }
-        return item;
-      })
-      .filter((item) => item.quantity > 0);
+  const handleUpdateCartQuantity = (productId: string, newQuantity: number) => {
+    const targetItem = cart.find((item) => item.product.id === productId);
+    if (!targetItem) return;
 
+    if (newQuantity <= 0) {
+      handleRemoveFromCart(productId);
+      return;
+    }
+
+    const maxAllowed = getMaxAllowedQuantityForDistance(targetItem.product, address.estimatedDistanceKm);
+    if (newQuantity > maxAllowed) {
+      addToast('warning', `Maximum allowed quantity for ${targetItem.product.name} at ${address.estimatedDistanceKm}km is ${maxAllowed} ${targetItem.product.unit}s.`);
+      return;
+    }
+
+    const updatedCart = cart.map((item) =>
+      item.product.id === productId ? { ...item, quantity: newQuantity } : item
+    );
     setCart(updatedCart);
     saveCart(updatedCart);
   };
@@ -180,28 +236,32 @@ export function App() {
     const updatedCart = cart.filter((item) => item.product.id !== productId);
     setCart(updatedCart);
     saveCart(updatedCart);
+    addToast('info', 'Item removed from cart.');
   };
 
-  // Order Handlers
-  const handleOrderSuccess = (newOrder: Order) => {
-    createOrder(newOrder);
-    setOrders(getOrders());
-    setProducts(getProducts()); // refresh stock
+  const handleClearCart = () => {
     setCart([]);
     saveCart([]);
+  };
+
+  // --- ORDER HANDLERS ---
+  const handlePlaceOrder = (newOrder: Order) => {
+    createOrder(newOrder);
+    setOrders(getOrders());
+    setProducts(getProducts());
+    handleClearCart();
     setIsCheckoutOpen(false);
-    setIsCartOpen(false);
     setActiveTab('orders');
     addToast('success', `Order ${newOrder.id} placed successfully!`);
   };
 
-  const handleUpdateOrder = (updatedOrder: Order) => {
+  const handleUpdateOrderStatus = (updatedOrder: Order) => {
     updateOrder(updatedOrder);
     setOrders(getOrders());
     addToast('info', `Order ${updatedOrder.id} status updated.`);
   };
 
-  // Product Manager Handlers
+  // --- SELLER PRODUCT MANAGER HANDLERS ---
   const handleSaveProduct = (product: Product) => {
     if (products.some((p) => p.id === product.id)) {
       updateProduct(product);
@@ -219,14 +279,13 @@ export function App() {
     addToast('info', 'Product removed from catalog.');
   };
 
-  // Save address from modal
+  // --- LOCATION & PROFILE HANDLERS ---
   const handleSaveAddress = (newAddress: AddressDetails) => {
     setAddress(newAddress);
     saveUserAddress(newAddress);
     addToast('info', `Location updated: ${newAddress.pincode} (${newAddress.estimatedDistanceKm} km from farm)`);
   };
 
-  // Profile Save Handlers
   const handleSaveUserProfile = (profile: UserProfile) => {
     setUserProfile(profile);
     saveUserProfile(profile);
@@ -243,12 +302,43 @@ export function App() {
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-950 via-slate-950 to-emerald-950 text-emerald-50 flex flex-col font-sans selection:bg-amber-400 selection:text-emerald-950">
+    <div className="min-h-screen bg-emerald-950 text-emerald-100 flex flex-col font-sans selection:bg-amber-400 selection:text-emerald-950">
       
-      {/* Header Bar */}
+      {/* TOAST NOTIFICATION CONTAINER */}
+      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto p-3.5 rounded-2xl border shadow-xl flex items-center justify-between gap-3 text-xs font-semibold animate-slide-in ${
+              toast.type === 'success'
+                ? 'bg-emerald-900 border-emerald-500 text-emerald-100'
+                : toast.type === 'warning'
+                ? 'bg-amber-950 border-amber-500 text-amber-100'
+                : 'bg-teal-950 border-teal-600 text-teal-100'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />}
+              {toast.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />}
+              {toast.type === 'info' && <Info className="w-4 h-4 text-teal-400 shrink-0" />}
+              <span>{toast.text}</span>
+            </div>
+            <button
+              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+              className="text-emerald-400 hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* HEADER COMPONENT */}
       <Header
-        role={role}
-        setRole={handleRoleChange}
+        authMode={authMode}
+        onOpenLogin={() => handleOpenLogin('customer')}
+        onOpenRegister={() => handleOpenRegister('customer')}
+        onLogout={handleLogout}
         cartCount={totalCartCount}
         openCart={() => setIsCartOpen(true)}
         address={address}
@@ -258,43 +348,28 @@ export function App() {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         activeOrdersCount={activeOrdersCount}
-        openAccountModal={handleOpenAccountModal}
+        userProfile={userProfile}
+        sellerProfile={sellerProfile}
+        openAccountModal={() => {
+          if (authMode === 'customer') setActiveTab('profile');
+          if (authMode === 'seller') setIsSellerAccountOpen(true);
+        }}
       />
 
-      {/* Toast Notifications Overlay */}
-      <div className="fixed bottom-4 right-4 z-50 space-y-2 max-w-sm pointer-events-none">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={`pointer-events-auto p-4 rounded-2xl shadow-2xl border flex items-center justify-between gap-3 text-xs font-bold transition-all animate-bounce-short ${
-              t.type === 'success'
-                ? 'bg-emerald-900 border-emerald-500 text-white'
-                : t.type === 'warning'
-                ? 'bg-amber-950 border-amber-500 text-amber-200'
-                : 'bg-emerald-950 border-emerald-700 text-emerald-100'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {t.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-              {t.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-400" />}
-              {t.type === 'info' && <Info className="w-4 h-4 text-blue-400" />}
-              <span>{t.text}</span>
-            </div>
-            <button
-              onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
-              className="text-emerald-400 hover:text-white"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* Main Content Body */}
+      {/* MAIN APPLICATION BODY */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
-        {/* BUYER PORTAL VIEWS */}
-        {role === 'buyer' && (
+        {/* 1. GUEST PROMOTIONAL HERO HOME SCREEN */}
+        {authMode === 'guest' && (
+          <PromotionalHero
+            products={products}
+            onOpenLogin={() => handleOpenLogin('customer')}
+            onOpenRegister={() => handleOpenRegister('customer')}
+          />
+        )}
+
+        {/* 2. CUSTOMER STOREFRONT INTERFACE */}
+        {authMode === 'customer' && (
           <>
             {activeTab === 'store' && (
               <ProductCatalog
@@ -312,16 +387,29 @@ export function App() {
             {activeTab === 'orders' && (
               <OrderTracker
                 orders={orders}
-                onUpdateOrder={handleUpdateOrder}
+                onUpdateOrder={handleUpdateOrderStatus}
+              />
+            )}
+
+            {activeTab === 'profile' && (
+              <BuyerProfileView
+                userProfile={userProfile}
+                onSaveProfile={handleSaveUserProfile}
+                orders={orders}
+                onSelectActiveAddress={(selectedAddr) => {
+                  setAddress(selectedAddr);
+                  saveUserAddress(selectedAddr);
+                }}
+                onLogout={handleLogout}
               />
             )}
           </>
         )}
 
-        {/* SELLER PORTAL VIEWS */}
-        {role === 'seller' && (
+        {/* 3. SELLER PORTAL INTERFACE */}
+        {authMode === 'seller' && (
           <>
-            {(activeTab === 'dashboard' || activeTab === 'store') && (
+            {activeTab === 'dashboard' && (
               <SellerDashboard
                 products={products}
                 orders={orders}
@@ -334,54 +422,40 @@ export function App() {
             )}
 
             {activeTab === 'products' && (
-              <div className="space-y-6 pb-12">
-                <div className="flex justify-between items-center">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800">
                   <div>
-                    <h2 className="text-2xl font-extrabold text-white">Harvest Inventory Catalog</h2>
-                    <p className="text-xs text-emerald-300">Manage items, pricing, and distance limits</p>
+                    <h2 className="font-black text-xl text-white">Vendor Product Management</h2>
+                    <p className="text-xs text-emerald-300">Add, edit pricing, or toggle stock levels for catalog listings.</p>
                   </div>
                   <button
                     onClick={() => {
                       setProductToEdit(null);
                       setIsProductManagerOpen(true);
                     }}
-                    className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-4 py-2.5 rounded-2xl text-xs shadow-lg"
+                    className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-4 py-2 rounded-xl text-xs shadow-md"
                   >
-                    + Add New Produce
+                    + Add New Product
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {products.map((p) => (
-                    <div key={p.id} className="bg-emerald-950/60 p-4 rounded-3xl border border-emerald-800 flex flex-col justify-between space-y-3">
-                      <div className="flex gap-3">
-                        <img src={p.image} alt={p.name} className="w-16 h-16 object-cover rounded-2xl border border-emerald-700" />
-                        <div>
-                          <h4 className="font-bold text-white text-sm">{p.name}</h4>
-                          <span className="text-xs text-emerald-400">₹{p.price} / {p.unit} • Stock: {p.stock}</span>
-                          <span className="block text-[10px] text-amber-300">Limits: 5km ({p.distanceRules.maxQtyKm5}), 15km ({p.distanceRules.maxQtyKm15}), Far ({p.distanceRules.maxQtyKmBeyond})</span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          setProductToEdit(p);
-                          setIsProductManagerOpen(true);
-                        }}
-                        className="w-full py-2 bg-emerald-900 hover:bg-emerald-800 border border-emerald-700 rounded-xl text-xs font-bold text-emerald-200"
-                      >
-                        Edit Product & Distance Rules
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <ProductCatalog
+                  products={products}
+                  categories={CATEGORIES}
+                  selectedCategory={selectedCategory}
+                  setSelectedCategory={setSelectedCategory}
+                  searchQuery={searchQuery}
+                  address={address}
+                  addToCart={handleAddToCart}
+                  openDistanceModal={() => setIsDistanceModalOpen(true)}
+                />
               </div>
             )}
 
             {activeTab === 'fulfillment' && (
               <SellerOrders
                 orders={orders}
-                onUpdateOrder={handleUpdateOrder}
+                onUpdateOrder={handleUpdateOrderStatus}
               />
             )}
 
@@ -393,33 +467,26 @@ export function App() {
 
       </main>
 
-      {/* Cart Slide-over Drawer */}
-      <CartDrawer
-        isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        cart={cart}
-        updateQuantity={handleUpdateCartQuantity}
-        removeFromCart={handleRemoveFromCart}
-        address={address}
-        proceedToCheckout={() => {
-          setIsCartOpen(false);
-          setIsCheckoutOpen(true);
-        }}
-        openDistanceModal={() => setIsDistanceModalOpen(true)}
-      />
-
-      {/* Checkout & Razorpay Modal */}
-      {isCheckoutOpen && (
-        <CheckoutModal
-          isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
-          cart={cart}
-          address={address}
-          onOrderSuccess={handleOrderSuccess}
+      {/* AUTH MODAL (LOGIN & REGISTRATION) */}
+      {isAuthModalOpen && (
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          initialTab={authModalTab}
+          initialRole={authModalRole}
+          onCustomerLoginSuccess={handleCustomerLoginSuccess}
+          onSellerLoginSuccess={handleSellerLoginSuccess}
+          onCustomerRegisterSuccess={(profile) => {
+            handleCustomerLoginSuccess(profile);
+            addToast('success', 'Customer account registered successfully!');
+          }}
+          onSellerRegisterSuccess={(msg) => {
+            addToast('info', msg);
+          }}
         />
       )}
 
-      {/* Distance Selector Modal */}
+      {/* LOCATION SELECTOR MODAL */}
       {isDistanceModalOpen && (
         <DistanceSelectorModal
           address={address}
@@ -428,7 +495,35 @@ export function App() {
         />
       )}
 
-      {/* Product Manager Modal */}
+      {/* CART DRAWER */}
+      {isCartOpen && (
+        <CartDrawer
+          isOpen={isCartOpen}
+          onClose={() => setIsCartOpen(false)}
+          cart={cart}
+          updateQuantity={handleUpdateCartQuantity}
+          removeFromCart={handleRemoveFromCart}
+          address={address}
+          proceedToCheckout={() => {
+            setIsCartOpen(false);
+            setIsCheckoutOpen(true);
+          }}
+          openDistanceModal={() => setIsDistanceModalOpen(true)}
+        />
+      )}
+
+      {/* CHECKOUT MODAL */}
+      {isCheckoutOpen && (
+        <CheckoutModal
+          isOpen={isCheckoutOpen}
+          onClose={() => setIsCheckoutOpen(false)}
+          cart={cart}
+          address={address}
+          onOrderSuccess={handlePlaceOrder}
+        />
+      )}
+
+      {/* PRODUCT MANAGER MODAL */}
       {isProductManagerOpen && (
         <ProductManagerModal
           isOpen={isProductManagerOpen}
@@ -439,7 +534,7 @@ export function App() {
         />
       )}
 
-      {/* Buyer My Account Modal */}
+      {/* BUYER ACCOUNT MODAL */}
       {isBuyerAccountOpen && (
         <BuyerAccountModal
           isOpen={isBuyerAccountOpen}
@@ -451,10 +546,11 @@ export function App() {
             setAddress(selectedAddr);
             saveUserAddress(selectedAddr);
           }}
+          onLogout={handleLogout}
         />
       )}
 
-      {/* Seller My Account Modal */}
+      {/* SELLER ACCOUNT MODAL */}
       {isSellerAccountOpen && (
         <SellerAccountModal
           isOpen={isSellerAccountOpen}
@@ -463,14 +559,15 @@ export function App() {
           onSaveSellerProfile={handleSaveSellerProfile}
           products={products}
           orders={orders}
+          onLogout={handleLogout}
         />
       )}
 
-      {/* Footer */}
+      {/* FOOTER */}
       <footer className="bg-emerald-950/90 border-t border-emerald-800/50 py-6 text-center text-xs text-emerald-400/80">
         <div className="max-w-7xl mx-auto px-4 flex flex-wrap justify-between items-center gap-2">
-          <span>© 2026 Shroom & Veggies Farm Market • Pure TypeScript React WebApp</span>
-          <span className="text-amber-400 font-medium">Razorpay Online Refunds • Interactive Map Location Picker</span>
+          <span>© 2026 Shroom & Veggies Farm Market • Dual-Interface React Application</span>
+          <span className="text-amber-400 font-medium">Customer 7-Day Auto-Session • Seller Tab Session Security</span>
         </div>
       </footer>
 

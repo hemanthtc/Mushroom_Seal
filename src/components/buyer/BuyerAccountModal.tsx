@@ -10,7 +10,8 @@ import {
   Check, 
   X, 
   Compass,
-  DollarSign
+  DollarSign,
+  LogOut
 } from 'lucide-react';
 import { MapLocationPicker } from '../common/MapLocationPicker';
 
@@ -21,6 +22,7 @@ interface BuyerAccountModalProps {
   onSaveProfile: (profile: UserProfile) => void;
   orders: Order[];
   onSelectActiveAddress: (address: AddressDetails) => void;
+  onLogout?: () => void;
 }
 
 export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
@@ -30,6 +32,7 @@ export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
   onSaveProfile,
   orders,
   onSelectActiveAddress,
+  onLogout,
 }) => {
   const [profileData, setProfileData] = useState<UserProfile>({ ...userProfile });
   const [activeSubTab, setActiveSubTab] = useState<'profile' | 'addresses' | 'stats'>('profile');
@@ -81,9 +84,24 @@ export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
               <p className="text-xs text-emerald-300">{profileData.name} • {profileData.phone}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-emerald-400 hover:text-white rounded-lg hover:bg-emerald-800">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onLogout && (
+              <button
+                onClick={() => {
+                  onLogout();
+                  onClose();
+                }}
+                className="flex items-center gap-1.5 bg-red-950/80 hover:bg-red-900 text-red-300 hover:text-red-100 font-bold px-3 py-1.5 rounded-xl border border-red-800/80 text-xs transition-colors shadow-sm"
+                title="Log out of buyer account"
+              >
+                <LogOut className="w-3.5 h-3.5 text-red-400" />
+                <span>Log Out</span>
+              </button>
+            )}
+            <button onClick={onClose} className="p-1.5 text-emerald-400 hover:text-white rounded-lg hover:bg-emerald-800">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs */}
@@ -172,19 +190,35 @@ export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2">
-                {savedSuccess ? (
-                  <span className="text-emerald-400 font-bold flex items-center gap-1">
-                    <Check className="w-4 h-4" /> Profile Updated!
-                  </span>
+              <div className="flex items-center justify-between pt-3 border-t border-emerald-800/80">
+                {onLogout ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onLogout();
+                      onClose();
+                    }}
+                    className="flex items-center gap-1.5 bg-red-950/80 hover:bg-red-900 text-red-300 hover:text-red-100 font-bold px-4 py-2 rounded-xl border border-red-800 text-xs transition-colors shadow-md"
+                  >
+                    <LogOut className="w-4 h-4 text-red-400" />
+                    <span>Log Out Account</span>
+                  </button>
                 ) : <div />}
 
-                <button
-                  type="submit"
-                  className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-5 py-2.5 rounded-xl shadow-lg"
-                >
-                  Save Profile
-                </button>
+                <div className="flex items-center gap-3">
+                  {savedSuccess && (
+                    <span className="text-emerald-400 font-bold flex items-center gap-1">
+                      <Check className="w-4 h-4" /> Profile Updated!
+                    </span>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-5 py-2.5 rounded-xl shadow-lg"
+                  >
+                    Save Profile
+                  </button>
+                </div>
               </div>
             </form>
           )}

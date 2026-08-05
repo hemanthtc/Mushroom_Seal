@@ -10,7 +10,8 @@ import {
   Check, 
   X,
   PackageCheck,
-  DollarSign
+  DollarSign,
+  LogOut
 } from 'lucide-react';
 
 interface SellerAccountModalProps {
@@ -20,6 +21,7 @@ interface SellerAccountModalProps {
   onSaveSellerProfile: (profile: SellerProfile) => void;
   products: Product[];
   orders: Order[];
+  onLogout?: () => void;
 }
 
 export const SellerAccountModal: React.FC<SellerAccountModalProps> = ({
@@ -29,6 +31,7 @@ export const SellerAccountModal: React.FC<SellerAccountModalProps> = ({
   onSaveSellerProfile,
   products,
   orders,
+  onLogout,
 }) => {
   const [formData, setFormData] = useState<SellerProfile>({ ...sellerProfile });
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -64,9 +67,25 @@ export const SellerAccountModal: React.FC<SellerAccountModalProps> = ({
               <p className="text-xs text-emerald-300">Owner: {formData.ownerName} • Est. {formData.establishedYear}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-emerald-400 hover:text-white rounded-lg hover:bg-emerald-800">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onLogout && (
+              <button
+                type="button"
+                onClick={() => {
+                  onLogout();
+                  onClose();
+                }}
+                className="flex items-center gap-1.5 bg-red-950/80 hover:bg-red-900 text-red-300 hover:text-red-100 font-bold px-3 py-1.5 rounded-xl border border-red-800/80 text-xs transition-colors shadow-sm"
+                title="Log out of seller account"
+              >
+                <LogOut className="w-3.5 h-3.5 text-red-400" />
+                <span>Log Out</span>
+              </button>
+            )}
+            <button onClick={onClose} className="p-1.5 text-emerald-400 hover:text-white rounded-lg hover:bg-emerald-800">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Form */}
@@ -192,18 +211,34 @@ export const SellerAccountModal: React.FC<SellerAccountModalProps> = ({
           </div>
 
           <div className="flex items-center justify-between pt-3 border-t border-emerald-800">
-            {savedSuccess ? (
-              <span className="text-emerald-400 font-bold flex items-center gap-1">
-                <Check className="w-4 h-4" /> Farm Profile Saved!
-              </span>
+            {onLogout ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onLogout();
+                  onClose();
+                }}
+                className="flex items-center gap-1.5 bg-red-950/80 hover:bg-red-900 text-red-300 hover:text-red-100 font-bold px-4 py-2 rounded-xl border border-red-800 text-xs transition-colors shadow-md"
+              >
+                <LogOut className="w-4 h-4 text-red-400" />
+                <span>Log Out Vendor Account</span>
+              </button>
             ) : <div />}
 
-            <button
-              type="submit"
-              className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-6 py-2.5 rounded-xl shadow-lg"
-            >
-              Save Seller Profile
-            </button>
+            <div className="flex items-center gap-3">
+              {savedSuccess && (
+                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                  <Check className="w-4 h-4" /> Farm Profile Saved!
+                </span>
+              )}
+
+              <button
+                type="submit"
+                className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-6 py-2.5 rounded-xl shadow-lg"
+              >
+                Save Seller Profile
+              </button>
+            </div>
           </div>
 
         </form>

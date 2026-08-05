@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { AddressDetails } from '../../types';
-import { MapPin, Navigation, CheckCircle, Info } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle, Info, Compass } from 'lucide-react';
+import { MapLocationPicker } from '../common/MapLocationPicker';
 
 interface DistanceSelectorModalProps {
   address: AddressDetails;
@@ -14,6 +15,7 @@ export const DistanceSelectorModal: React.FC<DistanceSelectorModalProps> = ({
   onClose,
 }) => {
   const [formData, setFormData] = useState<AddressDetails>({ ...address });
+  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
 
   const handleDistancePreset = (km: number, pincode: string) => {
     setFormData((prev) => ({
@@ -33,7 +35,7 @@ export const DistanceSelectorModal: React.FC<DistanceSelectorModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
       <div className="bg-emerald-950 border border-emerald-700/80 rounded-3xl max-w-md w-full overflow-hidden shadow-2xl">
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-900 to-teal-900 p-6 border-b border-emerald-800 text-white">
+        <div className="bg-gradient-to-r from-emerald-900 to-teal-900 p-6 border-b border-emerald-800 text-white flex justify-between items-center">
           <div className="flex items-center gap-2.5">
             <div className="p-2.5 bg-emerald-800/60 rounded-2xl border border-emerald-700">
               <MapPin className="w-6 h-6 text-amber-400" />
@@ -43,10 +45,23 @@ export const DistanceSelectorModal: React.FC<DistanceSelectorModalProps> = ({
               <p className="text-xs text-emerald-300">Set distance to calculate seller's quantity limits</p>
             </div>
           </div>
+          <button onClick={onClose} className="text-emerald-400 hover:text-white font-bold text-lg">
+            ✕
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-emerald-100">
           
+          {/* Google Maps Interactive Picker Launcher Button */}
+          <button
+            type="button"
+            onClick={() => setIsMapPickerOpen(true)}
+            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-black p-3.5 rounded-2xl flex items-center justify-center gap-2 text-xs shadow-lg transition-all transform hover:-translate-y-0.5"
+          >
+            <Compass className="w-4 h-4" />
+            <span>Open Google Maps Precise Location Picker</span>
+          </button>
+
           {/* Quick Distance Presets */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1">
@@ -183,6 +198,20 @@ export const DistanceSelectorModal: React.FC<DistanceSelectorModalProps> = ({
             </button>
           </div>
         </form>
+
+        {/* Google Maps Location Picker Submodal */}
+        {isMapPickerOpen && (
+          <MapLocationPicker
+            initialAddress={formData}
+            onSelectLocation={(updated) => {
+              setFormData(updated);
+              onSave(updated);
+              setIsMapPickerOpen(false);
+              onClose();
+            }}
+            onClose={() => setIsMapPickerOpen(false)}
+          />
+        )}
       </div>
     </div>
   );

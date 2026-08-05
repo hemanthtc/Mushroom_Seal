@@ -8,6 +8,10 @@ const ADDRESS_KEY = 'mushroom_veggies_address';
 const ROLE_KEY = 'mushroom_veggies_role';
 const USER_PROFILE_KEY = 'mushroom_veggies_user_profile';
 const SELLER_PROFILE_KEY = 'mushroom_veggies_seller_profile';
+const CUSTOMER_SESSION_EXPIRY_KEY = 'mushroom_veggies_customer_expiry';
+const SELLER_SESSION_KEY = 'mushroom_veggies_seller_session';
+const CUSTOMER_TOKEN_KEY = 'customer_token';
+const SELLER_TOKEN_KEY = 'seller_token';
 
 export const DEFAULT_ADDRESS: AddressDetails = {
   fullName: 'Vikram Sethi',
@@ -55,13 +59,30 @@ export const DEFAULT_SELLER_PROFILE: SellerProfile = {
   establishedYear: 2018,
 };
 
+const PREBUILT_PRODUCT_IDS = ['prod-1', 'prod-2', 'prod-3', 'prod-4', 'prod-5', 'prod-6', 'prod-7', 'prod-8'];
+const PREBUILT_ORDER_IDS = ['ORD-79102', 'ORD-68214', 'ORD-54190'];
+
 // Initialize default storage if empty
 export const initializeStorage = (): void => {
   if (!localStorage.getItem(PRODUCTS_KEY)) {
     localStorage.setItem(PRODUCTS_KEY, JSON.stringify(INITIAL_PRODUCTS));
+  } else {
+    // Purge any legacy prebuilt products stored in localStorage
+    const existing = getProducts();
+    const filtered = existing.filter((p) => !PREBUILT_PRODUCT_IDS.includes(p.id));
+    if (filtered.length !== existing.length) {
+      saveProducts(filtered);
+    }
   }
   if (!localStorage.getItem(ORDERS_KEY)) {
     localStorage.setItem(ORDERS_KEY, JSON.stringify(INITIAL_ORDERS));
+  } else {
+    // Purge any legacy prebuilt orders stored in localStorage
+    const existingOrders = getOrders();
+    const filteredOrders = existingOrders.filter((o) => !PREBUILT_ORDER_IDS.includes(o.id));
+    if (filteredOrders.length !== existingOrders.length) {
+      saveOrders(filteredOrders);
+    }
   }
   if (!localStorage.getItem(ADDRESS_KEY)) {
     localStorage.setItem(ADDRESS_KEY, JSON.stringify(DEFAULT_ADDRESS));
@@ -75,6 +96,76 @@ export const initializeStorage = (): void => {
   if (!localStorage.getItem(SELLER_PROFILE_KEY)) {
     localStorage.setItem(SELLER_PROFILE_KEY, JSON.stringify(DEFAULT_SELLER_PROFILE));
   }
+};
+
+// --- SESSION STORAGE HELPERS ---
+
+/**
+ * Customer 7-Day Session Persistence:
+ * Stores token & profile in localStorage with a 7-day expiration timestamp.
+ * Customer stays logged in across browser closes until 7 days elapse.
+ */
+export const saveCustomerSession = (profile: UserProfile, token = 'cust_jwt_token_active'): void => {
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const expiryTime = Date.now() + SEVEN_DAYS_MS;
+  localStorage.setItem(CUSTOMER_TOKEN_KEY, token);
+  localStorage.setItem(CUSTOMER_SESSION_EXPIRY_KEY, expiryTime.toString());
+  saveUserProfile(profile);
+};
+
+export const getCustomerSession = (): UserProfile | null => {
+  const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
+  const expiryStr = localStorage.getItem(CUSTOMER_SESSION_EXPIRY_KEY);
+
+  if (!token || !expiryStr) return null;
+
+  const expiry = parseInt(expiryStr, 10);
+  if (isNaN(expiry) || Date.now() > expiry) {
+    // Session expired (> 7 days)
+    clearCustomerSession();
+    return null;
+  }
+
+  return getUserProfile();
+};
+
+export const clearCustomerSession = (): void => {
+  localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+  localStorage.removeItem(CUSTOMER_SESSION_EXPIRY_KEY);
+};
+
+/**
+ * Seller High-Security Session Storage:
+ * Stores token & profile in sessionStorage.
+ * Automatically cleared when the browser tab or window is closed.
+ */
+export const saveSellerSession = (profile: SellerProfile, token = 'seller_jwt_token_active'): void => {
+  sessionStorage.setItem(SELLER_TOKEN_KEY, token);
+  sessionStorage.setItem(SELLER_SESSION_KEY, JSON.stringify(profile));
+  saveSellerProfile(profile);
+};
+
+export const getSellerSession = (): SellerProfile | null => {
+  const token = sessionStorage.getItem(SELLER_TOKEN_KEY);
+  const sessionData = sessionStorage.getItem(SELLER_SESSION_KEY);
+
+  if (!token || !sessionData) return null;
+
+  try {
+    return JSON.parse(sessionData) as SellerProfile;
+  } catch {
+    return getSellerProfile();
+  }
+};
+
+export const clearSellerSession = (): void => {
+  sessionStorage.removeItem(SELLER_TOKEN_KEY);
+  sessionStorage.removeItem(SELLER_SESSION_KEY);
+};
+
+export const clearAllSessions = (): void => {
+  clearCustomerSession();
+  clearSellerSession();
 };
 
 // User Profile CRUD
@@ -109,7 +200,8 @@ export const saveSellerProfile = (profile: SellerProfile): void => {
 export const getProducts = (): Product[] => {
   try {
     const data = localStorage.getItem(PRODUCTS_KEY);
-    return data ? JSON.parse(data) : INITIAL_PRODUCTS;
+    const parsed: Product[] = data ? JSON.parse(data) : INITIAL_PRODUCTS;
+    return parsed.filter((p) => !PREBUILT_PRODUCT_IDS.includes(p.id));
   } catch {
     return INITIAL_PRODUCTS;
   }
@@ -139,7 +231,8 @@ export const deleteProduct = (id: string): void => {
 export const getOrders = (): Order[] => {
   try {
     const data = localStorage.getItem(ORDERS_KEY);
-    return data ? JSON.parse(data) : INITIAL_ORDERS;
+    const parsed: Order[] = data ? JSON.parse(data) : INITIAL_ORDERS;
+    return parsed.filter((o) => !PREBUILT_ORDER_IDS.includes(o.id));
   } catch {
     return INITIAL_ORDERS;
   }
