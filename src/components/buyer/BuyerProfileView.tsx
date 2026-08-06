@@ -16,7 +16,8 @@ import {
   Building,
   CheckCircle2,
   Edit3,
-  Lock
+  Lock,
+  AlertTriangle
 } from 'lucide-react';
 import { MapLocationPicker } from '../common/MapLocationPicker';
 
@@ -26,6 +27,7 @@ interface BuyerProfileViewProps {
   orders: Order[];
   onSelectActiveAddress: (address: AddressDetails) => void;
   onLogout?: () => void;
+  onDeleteAccount?: () => void;
 }
 
 export const BuyerProfileView: React.FC<BuyerProfileViewProps> = ({
@@ -34,14 +36,25 @@ export const BuyerProfileView: React.FC<BuyerProfileViewProps> = ({
   orders,
   onSelectActiveAddress,
   onLogout,
+  onDeleteAccount,
 }) => {
   const [profileData, setProfileData] = useState<UserProfile>({ ...userProfile });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'profile' | 'addresses' | 'stats'>('profile');
   const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [editingAddressIndex, setEditingAddressIndex] = useState<number | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [activeDetailCard, setActiveDetailCard] = useState<'orders' | 'spend' | null>(null);
 
   const totalSpent = orders.filter((o) => o.status !== 'Cancelled').reduce((sum, o) => sum + o.grandTotal, 0);
+
+  // Active address index: If only 1 address exists, default to 0; otherwise use defaultAddressIndex or 0
+  const activeAddressIndex = profileData.savedAddresses.length === 1 
+    ? 0 
+    : (profileData.defaultAddressIndex >= 0 && profileData.defaultAddressIndex < profileData.savedAddresses.length 
+        ? profileData.defaultAddressIndex 
+        : 0);
 
   const handleSaveProfileForm = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,23 +69,61 @@ export const BuyerProfileView: React.FC<BuyerProfileViewProps> = ({
     setIsEditingProfile(false);
   };
 
-  const handleAddMapAddress = (newAddress: AddressDetails) => {
-    const updatedAddresses = [...profileData.savedAddresses, newAddress];
-    const updatedProfile = { ...profileData, savedAddresses: updatedAddresses };
+  const handleSetActiveAddress = (index: number) => {
+    const targetAddr = profileData.savedAddresses[index];
+    if (!targetAddr) return;
+
+    const updatedProfile = {
+      ...profileData,
+      defaultAddressIndex: index,
+    };
     setProfileData(updatedProfile);
     onSaveProfile(updatedProfile);
-    onSelectActiveAddress(newAddress);
+    onSelectActiveAddress(targetAddr);
+  };
+
+  const handleSaveMapAddress = (savedAddress: AddressDetails) => {
+    let updatedAddresses: AddressDetails[];
+    let newDefaultIndex = activeAddressIndex;
+
+    if (editingAddressIndex !== null && editingAddressIndex < profileData.savedAddresses.length) {
+      // Edit existing address
+      updatedAddresses = [...profileData.savedAddresses];
+      updatedAddresses[editingAddressIndex] = savedAddress;
+    } else {
+      // Add new address - automatically select newly added address as active!
+      updatedAddresses = [...profileData.savedAddresses, savedAddress];
+      newDefaultIndex = updatedAddresses.length - 1;
+    }
+
+    const updatedProfile = {
+      ...profileData,
+      savedAddresses: updatedAddresses,
+      defaultAddressIndex: newDefaultIndex,
+    };
+
+    setProfileData(updatedProfile);
+    onSaveProfile(updatedProfile);
+    onSelectActiveAddress(savedAddress);
+    setIsMapPickerOpen(false);
+    setEditingAddressIndex(null);
   };
 
   const handleDeleteAddress = (index: number) => {
     const updated = profileData.savedAddresses.filter((_, i) => i !== index);
+    const newDefaultIndex = updated.length <= 1 ? 0 : (index === activeAddressIndex ? 0 : (index < activeAddressIndex ? activeAddressIndex - 1 : activeAddressIndex));
+    
     const updatedProfile = {
       ...profileData,
       savedAddresses: updated,
-      defaultAddressIndex: Math.max(0, profileData.defaultAddressIndex - 1),
+      defaultAddressIndex: newDefaultIndex,
     };
     setProfileData(updatedProfile);
     onSaveProfile(updatedProfile);
+
+    if (updated.length > 0) {
+      onSelectActiveAddress(updated[newDefaultIndex] || updated[0]);
+    }
   };
 
   return (
@@ -314,6 +365,29 @@ export const BuyerProfileView: React.FC<BuyerProfileViewProps> = ({
             </div>
 
           </form>
+
+          {/* DANGER ZONE: DELETE ACCOUNT */}
+          <div className="pt-6 border-t border-emerald-800/80">
+            <div className="bg-red-950/40 border border-red-800/60 rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-sm font-extrabold text-red-200 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400" /> Danger Zone: Delete Customer Account
+                </h3>
+                <p className="text-xs text-red-300/80 mt-0.5">
+                  Permanently delete your customer profile, saved delivery addresses, and logout active session.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(true)}
+                className="bg-red-600 hover:bg-red-500 text-white font-extrabold px-4 py-2.5 rounded-2xl text-xs flex items-center gap-1.5 shadow-lg transition-transform hover:scale-105 shrink-0"
+              >
+                <Trash2 className="w-4 h-4" /> Delete Account
+              </button>
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -326,12 +400,15 @@ export const BuyerProfileView: React.FC<BuyerProfileViewProps> = ({
                 <MapPin className="w-5 h-5 text-amber-400" /> Saved Locations & Distance Calculation
               </h2>
               <p className="text-xs text-emerald-300 mt-1">
-                Manage your delivery addresses and set your default location for real-time farm distance rules.
+                Manage your delivery addresses and set your active default location for real-time farm distance rules.
               </p>
             </div>
 
             <button
-              onClick={() => setIsMapPickerOpen(true)}
+              onClick={() => {
+                setEditingAddressIndex(null);
+                setIsMapPickerOpen(true);
+              }}
               className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-black px-4 py-2.5 rounded-2xl flex items-center gap-2 text-xs shadow-lg transform hover:-translate-y-0.5"
             >
               <Compass className="w-4 h-4" /> + Add New Address via Map Picker
@@ -349,7 +426,11 @@ export const BuyerProfileView: React.FC<BuyerProfileViewProps> = ({
               {profileData.savedAddresses.map((addr, idx) => (
                 <div
                   key={idx}
-                  className="bg-emerald-900/50 hover:bg-emerald-900/70 p-5 rounded-3xl border border-emerald-800/80 flex flex-col justify-between space-y-4 transition-all shadow-md"
+                  className={`bg-emerald-900/50 hover:bg-emerald-900/70 p-5 rounded-3xl border flex flex-col justify-between space-y-4 transition-all shadow-md ${
+                    idx === activeAddressIndex
+                      ? 'border-amber-400/90 ring-2 ring-amber-400/40'
+                      : 'border-emerald-800/80'
+                  }`}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -371,20 +452,41 @@ export const BuyerProfileView: React.FC<BuyerProfileViewProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between pt-3 border-t border-emerald-800/60">
-                    <button
-                      onClick={() => onSelectActiveAddress(addr)}
-                      className="bg-emerald-800 hover:bg-emerald-700 text-amber-300 hover:text-white font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" /> Set Active Delivery Location
-                    </button>
+                    {/* Active Address Badge vs Set Active Button */}
+                    {idx === activeAddressIndex ? (
+                      <div className="bg-amber-500 text-emerald-950 font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-950" /> Active Delivery Location
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleSetActiveAddress(idx)}
+                        className="bg-emerald-800 hover:bg-emerald-700 text-amber-300 hover:text-white font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" /> Set Active Delivery Location
+                      </button>
+                    )}
 
-                    <button
-                      onClick={() => handleDeleteAddress(idx)}
-                      className="text-red-400 hover:text-red-300 p-2 hover:bg-red-950/60 rounded-xl transition-colors"
-                      title="Remove Address"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {/* Edit & Delete Buttons Side-by-Side */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setEditingAddressIndex(idx);
+                          setIsMapPickerOpen(true);
+                        }}
+                        className="text-amber-400 hover:text-amber-300 p-2 hover:bg-amber-950/60 rounded-xl transition-colors flex items-center gap-1 text-xs font-bold"
+                        title="Edit Address"
+                      >
+                        <Edit3 className="w-4 h-4 text-amber-400" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteAddress(idx)}
+                        className="text-red-400 hover:text-red-300 p-2 hover:bg-red-950/60 rounded-xl transition-colors"
+                        title="Remove Address"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -401,29 +503,164 @@ export const BuyerProfileView: React.FC<BuyerProfileViewProps> = ({
               <Package className="w-5 h-5 text-amber-400" /> Activity Metrics & Benefits
             </h2>
             <p className="text-xs text-emerald-300 mt-1">
-              Overview of your customer account statistics and active organic farm membership perks.
+              Overview of your customer account statistics and active organic farm membership perks. Click any card below for details.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <div className="bg-emerald-900/50 p-6 rounded-3xl border border-emerald-800/80 space-y-2 text-center">
+          {/* 2 CARDS GRID (DEFAULT PINCODE REMOVED) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            
+            {/* 1. TOTAL ORDERS CARD */}
+            <div
+              onClick={() => setActiveDetailCard(activeDetailCard === 'orders' ? null : 'orders')}
+              className={`p-6 rounded-3xl border transition-all cursor-pointer select-none space-y-2 text-center transform hover:-translate-y-1 shadow-lg ${
+                activeDetailCard === 'orders'
+                  ? 'bg-emerald-900 border-amber-400 ring-2 ring-amber-400/50'
+                  : 'bg-emerald-900/50 hover:bg-emerald-900/70 border-emerald-800/80'
+              }`}
+            >
+              <span className="text-[10px] bg-amber-500/20 text-amber-300 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-400/40 inline-block mb-1">
+                💡 Click here for more details
+              </span>
               <Package className="w-8 h-8 text-amber-400 mx-auto" />
               <span className="text-xs text-emerald-300 font-bold block uppercase tracking-wider">Total Orders</span>
               <strong className="text-3xl text-white font-black">{orders.length}</strong>
             </div>
 
-            <div className="bg-emerald-900/50 p-6 rounded-3xl border border-emerald-800/80 space-y-2 text-center">
+            {/* 2. TOTAL AMOUNT SPENT CARD */}
+            <div
+              onClick={() => setActiveDetailCard(activeDetailCard === 'spend' ? null : 'spend')}
+              className={`p-6 rounded-3xl border transition-all cursor-pointer select-none space-y-2 text-center transform hover:-translate-y-1 shadow-lg ${
+                activeDetailCard === 'spend'
+                  ? 'bg-emerald-900 border-amber-400 ring-2 ring-amber-400/50'
+                  : 'bg-emerald-900/50 hover:bg-emerald-900/70 border-emerald-800/80'
+              }`}
+            >
+              <span className="text-[10px] bg-amber-500/20 text-amber-300 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-400/40 inline-block mb-1">
+                💡 Click here for more details
+              </span>
               <DollarSign className="w-8 h-8 text-emerald-400 mx-auto" />
               <span className="text-xs text-emerald-300 font-bold block uppercase tracking-wider">Total Amount Spent</span>
               <strong className="text-3xl text-amber-300 font-black">₹{totalSpent}</strong>
             </div>
 
-            <div className="bg-emerald-900/50 p-6 rounded-3xl border border-emerald-800/80 space-y-2 text-center">
-              <MapPin className="w-8 h-8 text-purple-400 mx-auto" />
-              <span className="text-xs text-emerald-300 font-bold block uppercase tracking-wider">Default Pincode</span>
-              <strong className="text-xl text-white font-bold block">{profileData.savedAddresses[0]?.pincode || '560034'}</strong>
-            </div>
           </div>
+
+          {/* DYNAMIC CARD DETAIL BREAKDOWN PANELS */}
+          {activeDetailCard === 'orders' && (
+            <div className="bg-emerald-900/40 p-6 rounded-3xl border border-emerald-800/90 space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-emerald-800 pb-3">
+                <h3 className="text-base font-extrabold text-amber-300 flex items-center gap-2">
+                  <Package className="w-5 h-5 text-amber-400" /> Order Tracking & History ({orders.length})
+                </h3>
+                <button 
+                  onClick={() => setActiveDetailCard(null)}
+                  className="text-xs bg-emerald-800 hover:bg-emerald-700 text-emerald-200 font-bold px-3 py-1 rounded-xl"
+                >
+                  Close Details ✕
+                </button>
+              </div>
+
+              {orders.length === 0 ? (
+                <p className="text-emerald-300 text-xs text-center py-4">No order history available yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {orders.map((o) => (
+                    <div key={o.id} className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-white text-xs">Order #{o.id}</span>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                            o.status === 'Delivered' ? 'bg-emerald-900 text-emerald-300 border border-emerald-700' :
+                            o.status === 'Cancelled' ? 'bg-red-950 text-red-300 border border-red-800' :
+                            'bg-amber-500/20 text-amber-300 border border-amber-400/40'
+                          }`}>
+                            {o.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-emerald-200 font-medium">
+                          {o.items.map(i => `${i.product.name} (x${i.quantity})`).join(', ')}
+                        </p>
+                        <p className="text-[11px] text-emerald-400">
+                          Placed on: {new Date(o.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-sm font-black text-amber-300 block">₹{o.grandTotal}</span>
+                        <span className="text-[10px] text-emerald-300 font-semibold">{o.paymentMethod || 'Razorpay Paid'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeDetailCard === 'spend' && (
+            <div className="bg-emerald-900/40 p-6 rounded-3xl border border-emerald-800/90 space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-emerald-800 pb-3">
+                <h3 className="text-base font-extrabold text-amber-300 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-400" /> Monthly Spending Breakdown & Details
+                </h3>
+                <button 
+                  onClick={() => setActiveDetailCard(null)}
+                  className="text-xs bg-emerald-800 hover:bg-emerald-700 text-emerald-200 font-bold px-3 py-1 rounded-xl"
+                >
+                  Close Details ✕
+                </button>
+              </div>
+
+              {orders.filter(o => o.status !== 'Cancelled').length === 0 ? (
+                <p className="text-emerald-300 text-xs text-center py-4">No spending data available yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {/* Monthly Summary Cards */}
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(
+                      orders.filter(o => o.status !== 'Cancelled').reduce((acc, order) => {
+                        const month = new Date(order.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                        acc[month] = (acc[month] || 0) + order.grandTotal;
+                        return acc;
+                      }, {} as Record<string, number>)
+                    ).map(([monthName, monthTotal]) => (
+                      <div key={monthName} className="bg-emerald-950 px-4 py-2 rounded-2xl border border-emerald-700 flex items-center gap-2 text-xs shadow-md">
+                        <span className="text-emerald-300 font-bold">{monthName}:</span>
+                        <strong className="text-amber-300 font-black text-sm">₹{monthTotal}</strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Strict 3-Column Table: Order Name, Delivered Date, Amount */}
+                  <div className="bg-emerald-950/80 rounded-2xl border border-emerald-800 overflow-hidden shadow-inner">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-emerald-900/80 text-amber-300 uppercase font-extrabold text-[10px] border-b border-emerald-800">
+                        <tr>
+                          <th className="px-4 py-3">Order Name</th>
+                          <th className="px-4 py-3">Delivered Date</th>
+                          <th className="px-4 py-3 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-emerald-800/60 text-emerald-100 font-medium">
+                        {orders.filter(o => o.status !== 'Cancelled').map((o) => (
+                          <tr key={o.id} className="hover:bg-emerald-900/40 transition-colors">
+                            <td className="px-4 py-3 font-bold text-white">
+                              {o.items.map(i => i.product.name).join(', ')}
+                            </td>
+                            <td className="px-4 py-3 text-emerald-300">
+                              {new Date(o.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </td>
+                            <td className="px-4 py-3 text-right font-black text-amber-300 text-sm">
+                              ₹{o.grandTotal}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="bg-gradient-to-br from-emerald-900/80 to-teal-900/80 p-6 rounded-3xl border border-emerald-700/80 space-y-3">
             <h3 className="font-extrabold text-amber-300 text-sm uppercase tracking-wider flex items-center gap-2">
@@ -450,17 +687,65 @@ export const BuyerProfileView: React.FC<BuyerProfileViewProps> = ({
       {/* Map Location Picker Submodal */}
       {isMapPickerOpen && (
         <MapLocationPicker
-          initialAddress={{
-            fullName: profileData.name,
-            phone: profileData.phone,
-            streetAddress: 'Koramangala 4th Block',
-            city: 'Bengaluru',
-            pincode: '560034',
-            estimatedDistanceKm: 3.5,
+          initialAddress={
+            editingAddressIndex !== null && profileData.savedAddresses[editingAddressIndex]
+              ? profileData.savedAddresses[editingAddressIndex]
+              : {
+                  fullName: profileData.name,
+                  phone: profileData.phone,
+                  streetAddress: '1st A Cross Rd, Basaveshwar Nagar',
+                  city: 'Bengaluru',
+                  pincode: '560079',
+                  estimatedDistanceKm: 6.5,
+                }
+          }
+          onSelectLocation={handleSaveMapAddress}
+          onClose={() => {
+            setIsMapPickerOpen(false);
+            setEditingAddressIndex(null);
           }}
-          onSelectLocation={handleAddMapAddress}
-          onClose={() => setIsMapPickerOpen(false)}
         />
+      )}
+
+      {/* DELETE ACCOUNT CONFIRMATION MODAL */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-emerald-950 border border-red-700/80 rounded-3xl max-w-md w-full p-6 text-emerald-100 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="p-3 bg-red-950 rounded-2xl border border-red-800">
+                <AlertTriangle className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-black text-lg text-white">Delete Account Permanently?</h3>
+                <p className="text-xs text-red-300">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-emerald-200 leading-relaxed bg-emerald-900/40 p-3.5 rounded-2xl border border-emerald-800">
+              Deleting your account will erase your saved profile name, email, saved delivery addresses, and terminate your active customer session.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2.5 font-bold text-emerald-300 hover:text-white text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  if (onDeleteAccount) onDeleteAccount();
+                }}
+                className="bg-red-600 hover:bg-red-500 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs shadow-lg transition-all"
+              >
+                Confirm Delete Account
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

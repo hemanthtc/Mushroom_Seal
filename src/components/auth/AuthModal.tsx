@@ -10,7 +10,9 @@ import {
   X, 
   Sparkles, 
   ShieldCheck, 
-  ArrowRight
+  ArrowRight,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import type { UserProfile, SellerProfile, AddressDetails } from '../../types';
 
@@ -47,6 +49,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Seller Login States
   const [sellerEmail, setSellerEmail] = useState('ramesh.patel@shroomvalley.org');
   const [sellerPassword, setSellerPassword] = useState('Seller123');
+  const [showSellerPassword, setShowSellerPassword] = useState(false);
+  const [showRegSellerPassword, setShowRegSellerPassword] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState(false);
@@ -487,13 +491,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         <div className="relative">
                           <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
                           <input
-                            type="password"
+                            type={showSellerPassword ? 'text' : 'password'}
                             required
                             placeholder="••••••••"
                             value={sellerPassword}
                             onChange={(e) => setSellerPassword(e.target.value)}
-                            className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-3 py-2.5 text-white font-medium focus:ring-2 focus:ring-amber-400"
+                            className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-10 py-2.5 text-white font-medium focus:ring-2 focus:ring-amber-400"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setShowSellerPassword(!showSellerPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-amber-300 p-1 transition-colors"
+                            title={showSellerPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showSellerPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
                         </div>
                       </div>
 
@@ -655,14 +667,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                         <div>
                           <label className="block text-emerald-300 font-bold mb-1">Password *</label>
-                          <input
-                            type="password"
-                            required
-                            placeholder="••••••••"
-                            value={regSellerPassword}
-                            onChange={(e) => setRegSellerPassword(e.target.value)}
-                            className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
-                          />
+                          <div className="relative">
+                            <input
+                              type={showRegSellerPassword ? 'text' : 'password'}
+                              required
+                              placeholder="••••••••"
+                              value={regSellerPassword}
+                              onChange={(e) => setRegSellerPassword(e.target.value)}
+                              className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-3 pr-10 py-2 text-white font-medium"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowRegSellerPassword(!showRegSellerPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-amber-300 p-1 transition-colors"
+                              title={showRegSellerPassword ? 'Hide password' : 'Show password'}
+                            >
+                              {showRegSellerPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
                         </div>
                       </div>
 

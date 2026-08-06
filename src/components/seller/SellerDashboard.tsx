@@ -1,5 +1,4 @@
-import React from 'react';
-import type { Product, Order } from '../../types';
+import type { Product, Order, TabType } from '../../types';
 import { 
   DollarSign, 
   ShoppingBag, 
@@ -17,7 +16,7 @@ interface SellerDashboardProps {
   products: Product[];
   orders: Order[];
   openAddProduct: () => void;
-  setActiveTab: (tab: 'store' | 'orders' | 'dashboard' | 'products' | 'fulfillment' | 'policy') => void;
+  setActiveTab: (tab: TabType) => void;
 }
 
 export const SellerDashboard: React.FC<SellerDashboardProps> = ({

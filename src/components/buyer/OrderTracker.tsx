@@ -13,23 +13,32 @@ import {
   AlertTriangle,
   RotateCcw,
   CreditCard,
+  Banknote,
+  CheckCircle2,
+  Lock,
   ChevronDown,
   ChevronUp,
-  Banknote,
-  CheckCircle2
+  X,
+  ArrowLeft
 } from 'lucide-react';
 
 interface OrderTrackerProps {
   orders: Order[];
   onUpdateOrder: (updatedOrder: Order) => void;
+  onBackToStore?: () => void;
 }
 
 export const OrderTracker: React.FC<OrderTrackerProps> = ({
   orders,
   onUpdateOrder,
+  onBackToStore,
 }) => {
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(orders[0]?.id || null);
+  // 1. Right side details box appears ONLY when user clicks any order card (initially null)
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   
+  // 2. Items Ordered expand / collapse state (default collapsed)
+  const [isItemsExpanded, setIsItemsExpanded] = useState<boolean>(false);
+
   // Edit Address state
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [editAddressData, setEditAddressData] = useState<AddressDetails | null>(null);
@@ -42,8 +51,15 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
   const [returningOrder, setReturningOrder] = useState<Order | null>(null);
   const [returnReason, setReturnReason] = useState('Quality issue / Mushrooms damaged in transit');
 
-  const toggleExpand = (id: string) => {
-    setExpandedOrderId(expandedOrderId === id ? null : id);
+  const selectedOrder = orders.find((o) => o.id === selectedOrderId) || null;
+
+  const handleToggleSelectOrder = (id: string) => {
+    if (selectedOrderId === id) {
+      setSelectedOrderId(null);
+    } else {
+      setSelectedOrderId(id);
+      setIsItemsExpanded(false); // default collapsed state when an order is clicked
+    }
   };
 
   // Handle Edit Address Submit
@@ -69,7 +85,7 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
     setEditAddressData(null);
   };
 
-  // Handle Cancel Order Submit with distinct Online Refund vs COD logic
+  // Handle Cancel Order Submit
   const handleConfirmCancel = (e: React.FormEvent) => {
     e.preventDefault();
     if (!cancellingOrder) return;
@@ -131,249 +147,344 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
 
   if (orders.length === 0) {
     return (
-      <div className="text-center py-20 bg-emerald-950/20 rounded-3xl border border-emerald-800/40 p-8">
-        <Package className="w-16 h-16 text-emerald-700 mx-auto mb-3" />
-        <h3 className="text-xl font-bold text-white">No active orders found</h3>
-        <p className="text-emerald-400 text-sm mt-1">Place an order from the Storefront to track real-time farm delivery!</p>
+      <div className="text-center py-20 bg-emerald-950/20 rounded-3xl border border-emerald-800/40 p-8 max-w-4xl mx-auto space-y-4">
+        <Package className="w-16 h-16 text-emerald-700 mx-auto" />
+        <div>
+          <h3 className="text-xl font-bold text-white">No active orders found</h3>
+          <p className="text-emerald-400 text-sm mt-1">Place an order from the Storefront to track real-time farm delivery!</p>
+        </div>
+        {onBackToStore && (
+          <button
+            onClick={onBackToStore}
+            className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-5 py-2.5 rounded-2xl text-xs shadow-lg transition-transform hover:scale-105"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to Storefront
+          </button>
+        )}
       </div>
     );
   }
 
+  const canEditDetails = selectedOrder && (selectedOrder.status === 'Pending' || selectedOrder.status === 'Packing');
+  const canCancel = selectedOrder && (selectedOrder.status === 'Pending' || selectedOrder.status === 'Packing');
+  const canReturn = selectedOrder && selectedOrder.status === 'Delivered';
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-12">
-      {/* Header title */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-extrabold text-white flex items-center gap-2">
-            <Package className="w-6 h-6 text-amber-400" /> Order Tracking & History
-          </h2>
-          <p className="text-xs text-emerald-300 mt-0.5">
-            Track farm dispatch, update address before shipment, or request returns/refunds.
-          </p>
+    <div className="bg-emerald-950/70 border border-emerald-800/80 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 max-w-6xl mx-auto pb-12 animate-fade-in">
+      
+      {/* MAIN CONTAINER HEADER WITH BACK BUTTON */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-800/60 pb-4">
+        <div className="flex items-center gap-3">
+          {onBackToStore && (
+            <button
+              onClick={onBackToStore}
+              className="p-2 sm:px-3.5 sm:py-2 bg-emerald-900/90 hover:bg-emerald-800 text-amber-400 hover:text-amber-300 rounded-2xl border border-emerald-700/70 transition-all flex items-center gap-1.5 text-xs font-bold shadow-md hover:scale-105 active:scale-95 shrink-0"
+              title="Back to Storefront"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
+          )}
+          <div>
+            <h2 className="text-xl sm:text-2xl font-extrabold text-white flex items-center gap-2">
+              <Package className="w-6 h-6 text-amber-400" /> Order Tracking & History
+            </h2>
+            <p className="text-xs text-emerald-300 mt-0.5">
+              Click any order card on the left to view details on the right side box.
+            </p>
+          </div>
         </div>
+
         <span className="bg-emerald-900 text-amber-300 text-xs font-bold px-3 py-1 rounded-full border border-emerald-700">
           {orders.length} Order(s)
         </span>
       </div>
 
-      {/* Orders List */}
-      <div className="space-y-4">
-        {orders.map((order) => {
-          const isExpanded = expandedOrderId === order.id;
-          const canEditDetails = order.status === 'Pending' || order.status === 'Packing';
-          const canCancel = order.status === 'Pending' || order.status === 'Packing';
-          const canReturn = order.status === 'Delivered';
+      {/* MAIN BOX SPLIT: LEFT SIDE BOX (ONLY ORDER CARDS) & RIGHT SIDE BOX (ORDER DETAILS) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* LEFT SIDE DISTINCT CONTAINER BOX (CONTAINER BOX AROUND ORDERS LIST AS MARKED IN RED) */}
+        <div className={`${selectedOrderId ? 'lg:col-span-5' : 'lg:col-span-12 max-w-2xl mx-auto'} bg-emerald-900/40 border border-emerald-700/80 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4 transition-all duration-300 w-full`}>
+          <div className="flex items-center justify-between border-b border-emerald-800/80 pb-3">
+            <h3 className="text-xs font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Package className="w-4 h-4 text-amber-400" /> Your Active Orders List
+            </h3>
+            <span className="text-[10px] bg-emerald-950 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-800">
+              {orders.length} Active
+            </span>
+          </div>
 
-          return (
-            <div
-              key={order.id}
-              className="bg-emerald-950/60 border border-emerald-800/80 rounded-3xl overflow-hidden shadow-xl transition-all"
-            >
-              {/* Order Row Header */}
-              <div
-                onClick={() => toggleExpand(order.id)}
-                className="p-5 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-emerald-900/40 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-emerald-900 rounded-2xl border border-emerald-700/60 text-amber-400">
-                    <Package className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-base text-white">{order.id}</span>
-                      <span className="text-xs text-emerald-400">• {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <div className="space-y-3">
+            {orders.map((order) => {
+              const isSelected = selectedOrderId === order.id;
+              return (
+                <div
+                  key={order.id}
+                  onClick={() => handleToggleSelectOrder(order.id)}
+                  className={`p-4 rounded-3xl border transition-all cursor-pointer select-none space-y-2 shadow-md ${
+                    isSelected
+                      ? 'bg-emerald-900 border-amber-400/90 ring-2 ring-amber-400/50 text-white shadow-xl transform scale-[1.01]'
+                      : 'bg-emerald-950/70 hover:bg-emerald-900/60 border-emerald-800/80 text-emerald-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-xl border ${isSelected ? 'bg-amber-500 text-emerald-950 border-amber-400' : 'bg-emerald-800 text-amber-400 border-emerald-700'}`}>
+                        <Package className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <strong className="text-sm font-extrabold block text-white">{order.id}</strong>
+                        <span className="text-[11px] text-emerald-300 font-medium">
+                          {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {order.items.length} item(s)
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-xs text-emerald-300 font-medium">
-                      {order.items.length} item(s) • Total: <strong className="text-amber-300 font-bold">₹{order.grandTotal}</strong>
-                    </p>
+                    <span className="text-amber-300 font-black text-sm">₹{order.grandTotal}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-emerald-800/60 text-xs">
+                    <StatusBadge status={order.status} />
+                    <span className="text-[11px] font-extrabold text-amber-400 flex items-center gap-1">
+                      {isSelected ? 'Selected 👈' : 'View Details →'}
+                    </span>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        </div>
 
-                {/* Status Pill */}
+        {/* RIGHT SIDE BOX: ORDER DETAILS (APPEARS ONLY WHEN USER CLICKS AN ORDER CARD ON THE LEFT) */}
+        {selectedOrderId && selectedOrder && (
+          <div className="lg:col-span-7 space-y-4 bg-emerald-900/50 border border-emerald-700/80 rounded-3xl p-6 shadow-2xl sticky top-20 animate-fade-in">
+            <div className="space-y-6">
+              
+              {/* Right Box Header with Close Button */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-800 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-black text-white">{selectedOrder.id}</h3>
+                    <StatusBadge status={selectedOrder.status} />
+                  </div>
+                  <p className="text-xs text-emerald-300 mt-1">
+                    Placed on {new Date(selectedOrder.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+
                 <div className="flex items-center gap-3">
-                  <StatusBadge status={order.status} />
-                  <button className="text-emerald-400 p-1">
-                    {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  <div className="text-right">
+                    <span className="text-xs text-emerald-300 block font-semibold">Grand Total</span>
+                    <strong className="text-2xl text-amber-300 font-black">₹{selectedOrder.grandTotal}</strong>
+                  </div>
+                  
+                  {/* Close Details Button */}
+                  <button
+                    onClick={() => setSelectedOrderId(null)}
+                    className="p-1.5 text-emerald-400 hover:text-white bg-emerald-950 hover:bg-emerald-800 rounded-xl border border-emerald-700/60 transition-colors"
+                    title="Close Order Details"
+                  >
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
 
-              {/* Expanded Details */}
-              {isExpanded && (
-                <div className="p-6 border-t border-emerald-800/60 bg-emerald-950/90 space-y-6">
-                  
-                  {/* Status Timeline Stepper */}
-                  <div className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/80 space-y-3">
-                    <h4 className="text-xs font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <Clock className="w-4 h-4" /> Real-Time Farm Order Timeline
-                    </h4>
+              {/* Real-Time Farm Order Timeline */}
+              <div className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-800/80 space-y-3">
+                <h4 className="text-xs font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-4 h-4" /> Real-Time Farm Order Timeline
+                </h4>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-2">
-                      <TimelineStep 
-                        label="Order Placed" 
-                        active={true} 
-                        current={order.status === 'Pending'} 
-                      />
-                      <TimelineStep 
-                        label="Packing Fresh" 
-                        active={['Packing', 'Out for Delivery', 'Delivered'].includes(order.status)} 
-                        current={order.status === 'Packing'} 
-                      />
-                      <TimelineStep 
-                        label="Out for Delivery" 
-                        active={['Out for Delivery', 'Delivered'].includes(order.status)} 
-                        current={order.status === 'Out for Delivery'} 
-                      />
-                      <TimelineStep 
-                        label="Delivered" 
-                        active={order.status === 'Delivered'} 
-                        current={order.status === 'Delivered'} 
-                      />
-                    </div>
-
-                    {/* Cancellation & Refund Information Card */}
-                    {order.status === 'Cancelled' && (
-                      <div className="bg-red-950/80 p-3.5 rounded-2xl border border-red-700/60 text-red-200 text-xs space-y-1 mt-2">
-                        <div className="flex justify-between items-center font-bold text-white">
-                          <span>Order Cancelled</span>
-                          <span className="text-amber-400 font-mono text-[11px]">{order.refundType || 'Cancelled'}</span>
-                        </div>
-                        <p className="text-[11px] text-red-300">Reason: {order.cancellationReason}</p>
-                        
-                        {order.refundType === 'Online Razorpay Refund' ? (
-                          <div className="bg-emerald-950 p-2.5 rounded-xl border border-emerald-600/60 text-emerald-300 text-[11px] font-bold mt-1.5 flex items-center justify-between">
-                            <span className="flex items-center gap-1">
-                              <CheckCircle2 className="w-4 h-4 text-emerald-400" /> ₹{order.refundAmount} Online Refund Processed to Razorpay Source
-                            </span>
-                            <span className="font-mono text-amber-300 text-[10px]">Ref: {order.refundId}</span>
-                          </div>
-                        ) : (
-                          <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-700 text-slate-300 text-[11px] font-medium mt-1.5 flex items-center gap-1">
-                            <Banknote className="w-4 h-4 text-amber-400" /> Cash on Delivery Order • No cash collected, ₹0 refund required.
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {order.status === 'Return Requested' && (
-                      <div className="bg-amber-950/80 p-3 rounded-xl border border-amber-700/60 text-amber-200 text-xs mt-2">
-                        <strong className="text-white">Return Request Status:</strong> {order.returnStatus || 'Pending Review'}
-                        <p className="text-[11px] mt-0.5 text-amber-300">Reason: {order.returnReason}</p>
-                      </div>
-                    )}
-
-                    {order.status === 'Refunded' && (
-                      <div className="bg-emerald-950/90 p-3 rounded-xl border border-emerald-500/60 text-emerald-200 text-xs mt-2">
-                        <strong className="text-white">✓ Refund Processed:</strong> ₹{order.grandTotal} credited back to online account.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Items List */}
-                  <div>
-                    <h4 className="text-xs font-bold text-emerald-300 uppercase tracking-wider mb-2">Items Ordered</h4>
-                    <div className="space-y-2">
-                      {order.items.map((item) => (
-                        <div key={item.product.id} className="flex items-center justify-between bg-emerald-900/40 p-3 rounded-xl border border-emerald-800/50 text-xs">
-                          <div className="flex items-center gap-3">
-                            <img src={item.product.image} alt={item.product.name} className="w-10 h-10 object-cover rounded-lg" />
-                            <div>
-                              <strong className="text-white block">{item.product.name}</strong>
-                              <span className="text-emerald-400">Qty: {item.quantity} × ₹{item.product.price} / {item.product.unit}</span>
-                            </div>
-                          </div>
-                          <span className="font-extrabold text-white">₹{item.product.price * item.quantity}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Address & Payment Info */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                    
-                    {/* Address Block */}
-                    <div className="bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <h4 className="font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5" /> Delivery Address
-                        </h4>
-                        {canEditDetails && (
-                          <button
-                            onClick={() => {
-                              setEditingOrder(order);
-                              setEditAddressData({ ...order.address });
-                            }}
-                            className="text-amber-400 hover:underline font-bold flex items-center gap-1 text-[11px]"
-                          >
-                            <Edit3 className="w-3 h-3" /> Edit Details
-                          </button>
-                        )}
-                      </div>
-                      
-                      <p className="text-white font-bold">{order.address.fullName}</p>
-                      <p className="text-emerald-200">{order.address.streetAddress}, {order.address.city} - {order.address.pincode}</p>
-                      <p className="text-emerald-300 font-semibold flex items-center gap-1">
-                        <Phone className="w-3 h-3 text-amber-400" /> {order.address.phone}
-                      </p>
-                      
-                      {!canEditDetails && (
-                        <p className="text-[10px] text-emerald-400/70 italic pt-1">
-                          Address modification locked after dispatch.
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Payment & Action Block */}
-                    <div className="bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800 space-y-3 flex flex-col justify-between">
-                      <div className="space-y-1.5">
-                        <h4 className="font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1">
-                          <CreditCard className="w-3.5 h-3.5" /> Payment & Receipt
-                        </h4>
-                        <div className="flex justify-between text-emerald-200">
-                          <span>Method:</span>
-                          <strong className="text-white">{order.paymentMethod}</strong>
-                        </div>
-                        <div className="flex justify-between text-emerald-200">
-                          <span>Transaction Ref:</span>
-                          <span className="font-mono text-amber-300 text-[11px]">{order.paymentId}</span>
-                        </div>
-                        <div className="flex justify-between text-emerald-200">
-                          <span>Payment Status:</span>
-                          <span className={`font-bold ${order.isPaid ? 'text-emerald-400' : 'text-amber-400'}`}>
-                            {order.isPaid ? '✓ Paid Online (Razorpay)' : 'Cash on Delivery'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Action Buttons: Cancel & Return */}
-                      <div className="pt-2 border-t border-emerald-800/60 flex items-center gap-2">
-                        {canCancel && (
-                          <button
-                            onClick={() => setCancellingOrder(order)}
-                            className="flex-1 bg-red-950/80 hover:bg-red-900 border border-red-700/70 text-red-200 font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors"
-                          >
-                            <XCircle className="w-4 h-4 text-red-400" /> Cancel Order
-                          </button>
-                        )}
-
-                        {canReturn && (
-                          <button
-                            onClick={() => setReturningOrder(order)}
-                            className="flex-1 bg-amber-950/80 hover:bg-amber-900 border border-amber-700/70 text-amber-200 font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors"
-                          >
-                            <RotateCcw className="w-4 h-4 text-amber-400" /> Request Return / Refund
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                  </div>
-
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-2">
+                  <TimelineStep 
+                    label="Order Placed" 
+                    active={true} 
+                    current={selectedOrder.status === 'Pending'} 
+                  />
+                  <TimelineStep 
+                    label="Packing Fresh" 
+                    active={['Packing', 'Out for Delivery', 'Delivered'].includes(selectedOrder.status)} 
+                    current={selectedOrder.status === 'Packing'} 
+                  />
+                  <TimelineStep 
+                    label="Out for Delivery" 
+                    active={['Out for Delivery', 'Delivered'].includes(selectedOrder.status)} 
+                    current={selectedOrder.status === 'Out for Delivery'} 
+                  />
+                  <TimelineStep 
+                    label="Delivered" 
+                    active={selectedOrder.status === 'Delivered'} 
+                    current={selectedOrder.status === 'Delivered'} 
+                  />
                 </div>
-              )}
+
+                {/* Cancellation & Refund Information Card */}
+                {selectedOrder.status === 'Cancelled' && (
+                  <div className="bg-red-950/80 p-3.5 rounded-2xl border border-red-700/60 text-red-200 text-xs space-y-1 mt-2">
+                    <div className="flex justify-between items-center font-bold text-white">
+                      <span>Order Cancelled</span>
+                      <span className="text-amber-400 font-mono text-[11px]">{selectedOrder.refundType || 'Cancelled'}</span>
+                    </div>
+                    <p className="text-[11px] text-red-300">Reason: {selectedOrder.cancellationReason}</p>
+                    
+                    {selectedOrder.refundType === 'Online Razorpay Refund' ? (
+                      <div className="bg-emerald-950 p-2.5 rounded-xl border border-emerald-600/60 text-emerald-300 text-[11px] font-bold mt-1.5 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> ₹{selectedOrder.refundAmount} Online Refund Processed to Source
+                        </span>
+                        <span className="font-mono text-amber-300 text-[10px]">Ref: {selectedOrder.refundId}</span>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-700 text-slate-300 text-[11px] font-medium mt-1.5 flex items-center gap-1">
+                        <Banknote className="w-4 h-4 text-amber-400" /> Cash on Delivery Order • No cash collected, ₹0 refund required.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedOrder.status === 'Return Requested' && (
+                  <div className="bg-amber-950/80 p-3 rounded-xl border border-amber-700/60 text-amber-200 text-xs mt-2">
+                    <strong className="text-white">Return Request Status:</strong> {selectedOrder.returnStatus || 'Pending Review'}
+                    <p className="text-[11px] mt-0.5 text-amber-300">Reason: {selectedOrder.returnReason}</p>
+                  </div>
+                )}
+
+                {selectedOrder.status === 'Refunded' && (
+                  <div className="bg-emerald-950/90 p-3 rounded-xl border border-emerald-500/60 text-emerald-200 text-xs mt-2">
+                    <strong className="text-white">✓ Refund Processed:</strong> ₹{selectedOrder.grandTotal} credited back to online account.
+                  </div>
+                )}
+              </div>
+
+              {/* ITEMS ORDERED WITH COLLAPSE / EXPAND FEATURE */}
+              <div className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-800/80 space-y-3">
+                <div 
+                  onClick={() => setIsItemsExpanded(!isItemsExpanded)}
+                  className="flex items-center justify-between cursor-pointer select-none hover:text-amber-300 transition-colors"
+                >
+                  <h4 className="text-xs font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-amber-400" /> Items Ordered ({selectedOrder.items.length})
+                  </h4>
+                  <button 
+                    type="button"
+                    className="text-xs font-bold text-amber-400 hover:text-amber-300 bg-emerald-900 px-2.5 py-1 rounded-xl border border-emerald-700/60 flex items-center gap-1 transition-colors"
+                  >
+                    <span>{isItemsExpanded ? 'Collapse' : 'Expand'}</span>
+                    {isItemsExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                {/* Collapsible Content */}
+                {isItemsExpanded && (
+                  <div className="space-y-2 pt-1 animate-fade-in">
+                    {selectedOrder.items.map((item) => (
+                      <div key={item.product.id} className="flex items-center justify-between bg-emerald-900/40 p-3 rounded-xl border border-emerald-800/50 text-xs">
+                        <div className="flex items-center gap-3">
+                          <img src={item.product.image} alt={item.product.name} className="w-10 h-10 object-cover rounded-lg border border-emerald-700" />
+                          <div>
+                            <strong className="text-white block font-bold">{item.product.name}</strong>
+                            <span className="text-emerald-400">Qty: {item.quantity} × ₹{item.product.price} / {item.product.unit}</span>
+                          </div>
+                        </div>
+                        <span className="font-extrabold text-white">₹{item.product.price * item.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Delivery Address & Payment Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                
+                {/* Address Block */}
+                <div className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-800 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5" /> Delivery Address
+                    </h4>
+                    {canEditDetails && (
+                      <button
+                        onClick={() => {
+                          setEditingOrder(selectedOrder);
+                          setEditAddressData({ ...selectedOrder.address });
+                        }}
+                        className="text-amber-400 hover:underline font-bold flex items-center gap-1 text-[11px]"
+                      >
+                        <Edit3 className="w-3 h-3" /> Edit Details
+                      </button>
+                    )}
+                  </div>
+                  
+                  <p className="text-white font-bold">{selectedOrder.address.fullName}</p>
+                  <p className="text-emerald-200">{selectedOrder.address.streetAddress}, {selectedOrder.address.city} - {selectedOrder.address.pincode}</p>
+                  <p className="text-emerald-300 font-semibold flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-amber-400" /> {selectedOrder.address.phone}
+                  </p>
+                  
+                  {!canEditDetails && selectedOrder.status !== 'Cancelled' && (
+                    <p className="text-[10px] text-amber-300 font-bold bg-amber-950/60 px-2.5 py-1 rounded-xl border border-amber-800/80 flex items-center gap-1 pt-1">
+                      <Lock className="w-3 h-3 text-amber-400 shrink-0" /> Delivery address locked — Order has been shipped & cannot be modified.
+                    </p>
+                  )}
+                </div>
+
+                {/* Payment & Receipt Block */}
+                <div className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-800 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-1.5">
+                    <h4 className="font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1">
+                      <CreditCard className="w-3.5 h-3.5" /> Payment & Receipt
+                    </h4>
+                    <div className="flex justify-between text-emerald-200">
+                      <span>Method:</span>
+                      <strong className="text-white">{selectedOrder.paymentMethod}</strong>
+                    </div>
+                    <div className="flex justify-between text-emerald-200">
+                      <span>Transaction Ref:</span>
+                      <span className="font-mono text-amber-300 text-[11px]">{selectedOrder.paymentId}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-200">
+                      <span>Payment Status:</span>
+                      <span className={`font-bold ${selectedOrder.isPaid ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {selectedOrder.isPaid ? '✓ Paid Online (Razorpay)' : 'Cash on Delivery'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons: Cancel & Return */}
+                  <div className="pt-2 border-t border-emerald-800/60 flex items-center gap-2">
+                    {canCancel ? (
+                      <button
+                        onClick={() => setCancellingOrder(selectedOrder)}
+                        className="flex-1 bg-red-950/80 hover:bg-red-900 border border-red-700/70 text-red-200 font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors"
+                      >
+                        <XCircle className="w-4 h-4 text-red-400" /> Cancel Order
+                      </button>
+                    ) : selectedOrder.status !== 'Cancelled' && selectedOrder.status !== 'Delivered' && selectedOrder.status !== 'Refunded' && selectedOrder.status !== 'Return Requested' ? (
+                      <button
+                        disabled
+                        className="flex-1 bg-gray-900/60 border border-gray-700/60 text-gray-400 font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-not-allowed opacity-75"
+                        title="Order cancellation is disabled once the order is shipped / out for delivery."
+                      >
+                        <Lock className="w-3.5 h-3.5 text-gray-400" /> Cancel Disabled (Shipped)
+                      </button>
+                    ) : null}
+
+                    {canReturn && (
+                      <button
+                        onClick={() => setReturningOrder(selectedOrder)}
+                        className="flex-1 bg-amber-950/80 hover:bg-amber-900 border border-amber-700/70 text-amber-200 font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors"
+                      >
+                        <RotateCcw className="w-4 h-4 text-amber-400" /> Request Return / Refund
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
             </div>
-          );
-        })}
+          </div>
+        )}
+
       </div>
 
       {/* Modal: Edit Address & Phone before shipment */}

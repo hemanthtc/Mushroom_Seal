@@ -6,6 +6,16 @@ export type CategoryType =
   | 'Exotic & Herbs' 
   | 'Farm Combos';
 
+export type TabType = 
+  | 'store' 
+  | 'cart'
+  | 'orders' 
+  | 'dashboard' 
+  | 'products' 
+  | 'fulfillment' 
+  | 'policy' 
+  | 'profile';
+
 export interface DistanceRules {
   maxQtyKm5: number;   // Within 5 km
   maxQtyKm15: number;  // 5 to 15 km
@@ -40,6 +50,11 @@ export interface AddressDetails {
   city: string;
   pincode: string;
   landmark?: string;
+  houseNo?: string;
+  areaName?: string;
+  deliveryInstructions?: string;
+  addressTag?: 'Home' | 'Work' | 'Other';
+  fullGoogleAddress?: string;
   estimatedDistanceKm: number;
   latitude?: number;
   longitude?: number;

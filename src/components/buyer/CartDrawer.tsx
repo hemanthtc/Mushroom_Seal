@@ -24,7 +24,6 @@ interface CartDrawerProps {
   removeFromCart: (productId: string) => void;
   address: AddressDetails;
   proceedToCheckout: () => void;
-  openDistanceModal: () => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -35,7 +34,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   removeFromCart,
   address,
   proceedToCheckout,
-  openDistanceModal,
 }) => {
   if (!isOpen) return null;
 
@@ -86,12 +84,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <MapPin className="w-4 h-4 text-amber-400" />
               <span>Delivering to <strong>{address.pincode}</strong> ({address.estimatedDistanceKm} km away)</span>
             </div>
-            <button
-              onClick={openDistanceModal}
-              className="text-amber-400 hover:underline font-bold text-[11px]"
-            >
-              Edit Zone
-            </button>
           </div>
 
           {/* Cart Items List */}

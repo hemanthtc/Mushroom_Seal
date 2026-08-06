@@ -12,6 +12,20 @@ const CUSTOMER_SESSION_EXPIRY_KEY = 'mushroom_veggies_customer_expiry';
 const SELLER_SESSION_KEY = 'mushroom_veggies_seller_session';
 const CUSTOMER_TOKEN_KEY = 'customer_token';
 const SELLER_TOKEN_KEY = 'seller_token';
+const ACTIVE_CUST_PHONE_KEY = 'mushroom_veggies_active_cust_phone';
+
+export const sanitizePhone = (phone?: string): string => {
+  if (!phone) return 'guest';
+  return phone.replace(/\D/g, '') || 'guest';
+};
+
+export const getActiveCustomerPhone = (): string => {
+  return localStorage.getItem(ACTIVE_CUST_PHONE_KEY) || '';
+};
+
+export const setActiveCustomerPhone = (phone: string): void => {
+  localStorage.setItem(ACTIVE_CUST_PHONE_KEY, phone);
+};
 
 export const DEFAULT_ADDRESS: AddressDetails = {
   fullName: 'Vikram Sethi',
@@ -67,7 +81,6 @@ export const initializeStorage = (): void => {
   if (!localStorage.getItem(PRODUCTS_KEY)) {
     localStorage.setItem(PRODUCTS_KEY, JSON.stringify(INITIAL_PRODUCTS));
   } else {
-    // Purge any legacy prebuilt products stored in localStorage
     const existing = getProducts();
     const filtered = existing.filter((p) => !PREBUILT_PRODUCT_IDS.includes(p.id));
     if (filtered.length !== existing.length) {
@@ -77,21 +90,14 @@ export const initializeStorage = (): void => {
   if (!localStorage.getItem(ORDERS_KEY)) {
     localStorage.setItem(ORDERS_KEY, JSON.stringify(INITIAL_ORDERS));
   } else {
-    // Purge any legacy prebuilt orders stored in localStorage
     const existingOrders = getOrders();
     const filteredOrders = existingOrders.filter((o) => !PREBUILT_ORDER_IDS.includes(o.id));
     if (filteredOrders.length !== existingOrders.length) {
       saveOrders(filteredOrders);
     }
   }
-  if (!localStorage.getItem(ADDRESS_KEY)) {
-    localStorage.setItem(ADDRESS_KEY, JSON.stringify(DEFAULT_ADDRESS));
-  }
   if (!localStorage.getItem(ROLE_KEY)) {
     localStorage.setItem(ROLE_KEY, 'buyer');
-  }
-  if (!localStorage.getItem(USER_PROFILE_KEY)) {
-    localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(DEFAULT_USER_PROFILE));
   }
   if (!localStorage.getItem(SELLER_PROFILE_KEY)) {
     localStorage.setItem(SELLER_PROFILE_KEY, JSON.stringify(DEFAULT_SELLER_PROFILE));
@@ -100,45 +106,37 @@ export const initializeStorage = (): void => {
 
 // --- SESSION STORAGE HELPERS ---
 
-/**
- * Customer 7-Day Session Persistence:
- * Stores token & profile in localStorage with a 7-day expiration timestamp.
- * Customer stays logged in across browser closes until 7 days elapse.
- */
 export const saveCustomerSession = (profile: UserProfile, token = 'cust_jwt_token_active'): void => {
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
   const expiryTime = Date.now() + SEVEN_DAYS_MS;
   localStorage.setItem(CUSTOMER_TOKEN_KEY, token);
   localStorage.setItem(CUSTOMER_SESSION_EXPIRY_KEY, expiryTime.toString());
-  saveUserProfile(profile);
+  setActiveCustomerPhone(profile.phone);
+  saveUserProfile(profile, profile.phone);
 };
 
 export const getCustomerSession = (): UserProfile | null => {
   const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
   const expiryStr = localStorage.getItem(CUSTOMER_SESSION_EXPIRY_KEY);
+  const activePhone = getActiveCustomerPhone();
 
-  if (!token || !expiryStr) return null;
+  if (!token || !expiryStr || !activePhone) return null;
 
   const expiry = parseInt(expiryStr, 10);
   if (isNaN(expiry) || Date.now() > expiry) {
-    // Session expired (> 7 days)
     clearCustomerSession();
     return null;
   }
 
-  return getUserProfile();
+  return getUserProfile(activePhone);
 };
 
 export const clearCustomerSession = (): void => {
   localStorage.removeItem(CUSTOMER_TOKEN_KEY);
   localStorage.removeItem(CUSTOMER_SESSION_EXPIRY_KEY);
+  localStorage.removeItem(ACTIVE_CUST_PHONE_KEY);
 };
 
-/**
- * Seller High-Security Session Storage:
- * Stores token & profile in sessionStorage.
- * Automatically cleared when the browser tab or window is closed.
- */
 export const saveSellerSession = (profile: SellerProfile, token = 'seller_jwt_token_active'): void => {
   sessionStorage.setItem(SELLER_TOKEN_KEY, token);
   sessionStorage.setItem(SELLER_SESSION_KEY, JSON.stringify(profile));
@@ -168,18 +166,29 @@ export const clearAllSessions = (): void => {
   clearSellerSession();
 };
 
-// User Profile CRUD
-export const getUserProfile = (): UserProfile => {
+// User Profile CRUD (Isolated per phone)
+export const getUserProfile = (phone?: string): UserProfile => {
   try {
-    const data = localStorage.getItem(USER_PROFILE_KEY);
-    return data ? JSON.parse(data) : DEFAULT_USER_PROFILE;
+    const targetPhone = phone || getActiveCustomerPhone();
+    const key = targetPhone ? `mushroom_veggies_user_profile_${sanitizePhone(targetPhone)}` : USER_PROFILE_KEY;
+    const data = localStorage.getItem(key);
+    if (data) return JSON.parse(data);
+    
+    // Check fallback legacy key
+    const legacy = localStorage.getItem(USER_PROFILE_KEY);
+    return legacy ? JSON.parse(legacy) : DEFAULT_USER_PROFILE;
   } catch {
     return DEFAULT_USER_PROFILE;
   }
 };
 
-export const saveUserProfile = (profile: UserProfile): void => {
-  localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
+export const saveUserProfile = (profile: UserProfile, phone?: string): void => {
+  const targetPhone = phone || profile.phone || getActiveCustomerPhone();
+  const key = targetPhone ? `mushroom_veggies_user_profile_${sanitizePhone(targetPhone)}` : USER_PROFILE_KEY;
+  localStorage.setItem(key, JSON.stringify(profile));
+  if (targetPhone) {
+    setActiveCustomerPhone(targetPhone);
+  }
 };
 
 // Seller Profile CRUD
@@ -227,12 +236,22 @@ export const deleteProduct = (id: string): void => {
   saveProducts(products);
 };
 
-// Order CRUD
-export const getOrders = (): Order[] => {
+// Order CRUD (Filtered by user phone for buyers, all for seller)
+export const getOrders = (userPhone?: string): Order[] => {
   try {
     const data = localStorage.getItem(ORDERS_KEY);
     const parsed: Order[] = data ? JSON.parse(data) : INITIAL_ORDERS;
-    return parsed.filter((o) => !PREBUILT_ORDER_IDS.includes(o.id));
+    const all = parsed.filter((o) => !PREBUILT_ORDER_IDS.includes(o.id));
+
+    if (!userPhone) {
+      return all; // Seller sees all orders
+    }
+
+    const cleanTarget = sanitizePhone(userPhone);
+    return all.filter((o) => {
+      const orderPhone = sanitizePhone(o.address.phone);
+      return orderPhone === cleanTarget;
+    });
   } catch {
     return INITIAL_ORDERS;
   }
@@ -263,32 +282,70 @@ export const updateOrder = (updatedOrder: Order): void => {
   saveOrders(orders);
 };
 
-// Cart CRUD
-export const getCart = (): CartItem[] => {
+// Cart CRUD (Isolated per phone)
+export const getCart = (phone?: string): CartItem[] => {
   try {
-    const data = localStorage.getItem(CART_KEY);
+    const targetPhone = phone || getActiveCustomerPhone();
+    const key = targetPhone ? `mushroom_veggies_cart_${sanitizePhone(targetPhone)}` : CART_KEY;
+    const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : [];
   } catch {
     return [];
   }
 };
 
-export const saveCart = (cart: CartItem[]): void => {
-  localStorage.setItem(CART_KEY, JSON.stringify(cart));
+export const saveCart = (cart: CartItem[], phone?: string): void => {
+  const targetPhone = phone || getActiveCustomerPhone();
+  const key = targetPhone ? `mushroom_veggies_cart_${sanitizePhone(targetPhone)}` : CART_KEY;
+  localStorage.setItem(key, JSON.stringify(cart));
 };
 
-// Address Details
-export const getUserAddress = (): AddressDetails => {
+// Address Details (Isolated per phone)
+export const getDynamicDistanceForAddress = (address: AddressDetails): number => {
+  const seller = getSellerProfile();
+  if (address.latitude && address.longitude) {
+    return calculateKmDistance(address.latitude, address.longitude, seller.latitude, seller.longitude);
+  }
+  // Pincode based lookup fallback if lat/lng missing
+  const pincodeMap: Record<string, number> = {
+    '560034': 4.5,
+    '560079': 6.5,
+    '560103': 9.8,
+    '560066': 18.5,
+    '560099': 24.0,
+    '560300': 30.0,
+    '562157': 35.0,
+  };
+  return pincodeMap[address.pincode] || address.estimatedDistanceKm || 30.0;
+};
+
+export const getUserAddress = (phone?: string): AddressDetails => {
   try {
-    const data = localStorage.getItem(ADDRESS_KEY);
-    return data ? JSON.parse(data) : DEFAULT_ADDRESS;
+    const targetPhone = phone || getActiveCustomerPhone();
+    const key = targetPhone ? `mushroom_veggies_address_${sanitizePhone(targetPhone)}` : ADDRESS_KEY;
+    const data = localStorage.getItem(key);
+    let addr: AddressDetails = DEFAULT_ADDRESS;
+    if (data) {
+      addr = JSON.parse(data);
+    } else {
+      const profile = getUserProfile(targetPhone);
+      if (profile && profile.savedAddresses && profile.savedAddresses.length > 0) {
+        const idx = profile.defaultAddressIndex >= 0 ? profile.defaultAddressIndex : 0;
+        addr = profile.savedAddresses[idx] || DEFAULT_ADDRESS;
+      }
+    }
+    addr.estimatedDistanceKm = getDynamicDistanceForAddress(addr);
+    return addr;
   } catch {
     return DEFAULT_ADDRESS;
   }
 };
 
-export const saveUserAddress = (address: AddressDetails): void => {
-  localStorage.setItem(ADDRESS_KEY, JSON.stringify(address));
+export const saveUserAddress = (address: AddressDetails, phone?: string): void => {
+  const targetPhone = phone || address.phone || getActiveCustomerPhone();
+  address.estimatedDistanceKm = getDynamicDistanceForAddress(address);
+  const key = targetPhone ? `mushroom_veggies_address_${sanitizePhone(targetPhone)}` : ADDRESS_KEY;
+  localStorage.setItem(key, JSON.stringify(address));
 };
 
 // Role
@@ -300,14 +357,18 @@ export const saveUserRole = (role: 'buyer' | 'seller'): void => {
   localStorage.setItem(ROLE_KEY, role);
 };
 
-// Calculate distance from lat/lng or default rule
-export const calculateKmDistance = (lat1: number, lon1: number, lat2 = 12.9716, lon2 = 77.5946): number => {
+// Calculate distance from lat/lng based on active seller farm location
+export const calculateKmDistance = (lat1: number, lon1: number, lat2?: number, lon2?: number): number => {
+  const seller = getSellerProfile();
+  const targetLat = lat2 !== undefined ? lat2 : (seller.latitude || 12.9716);
+  const targetLng = lon2 !== undefined ? lon2 : (seller.longitude || 77.5946);
+
   const R = 6371; // Radius of earth in km
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const dLat = (targetLat - lat1) * (Math.PI / 180);
+  const dLon = (targetLng - lon1) * (Math.PI / 180);
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(targetLat * (Math.PI / 180)) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const d = R * c;

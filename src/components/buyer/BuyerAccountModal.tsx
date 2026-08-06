@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import type { UserProfile, AddressDetails, Order } from '../../types';
 import { 
   User, 
-  MapPin, 
   Package, 
   Phone, 
   Mail, 
@@ -11,7 +10,9 @@ import {
   X, 
   Compass,
   DollarSign,
-  LogOut
+  LogOut,
+  Edit3,
+  CheckCircle2
 } from 'lucide-react';
 import { MapLocationPicker } from '../common/MapLocationPicker';
 
@@ -37,11 +38,20 @@ export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
   const [profileData, setProfileData] = useState<UserProfile>({ ...userProfile });
   const [activeSubTab, setActiveSubTab] = useState<'profile' | 'addresses' | 'stats'>('profile');
   const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
+  const [editingAddressIndex, setEditingAddressIndex] = useState<number | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [activeDetailCard, setActiveDetailCard] = useState<'orders' | 'spend' | null>(null);
 
   if (!isOpen) return null;
 
   const totalSpent = orders.filter((o) => o.status !== 'Cancelled').reduce((sum, o) => sum + o.grandTotal, 0);
+
+  // Active address index: If only 1 address exists, default to 0; otherwise use defaultAddressIndex or 0
+  const activeAddressIndex = profileData.savedAddresses.length === 1 
+    ? 0 
+    : (profileData.defaultAddressIndex >= 0 && profileData.defaultAddressIndex < profileData.savedAddresses.length 
+        ? profileData.defaultAddressIndex 
+        : 0);
 
   const handleSaveProfileForm = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,23 +60,61 @@ export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
     setTimeout(() => setSavedSuccess(false), 2000);
   };
 
-  const handleAddMapAddress = (newAddress: AddressDetails) => {
-    const updatedAddresses = [...profileData.savedAddresses, newAddress];
-    const updatedProfile = { ...profileData, savedAddresses: updatedAddresses };
+  const handleSetActiveAddress = (index: number) => {
+    const targetAddr = profileData.savedAddresses[index];
+    if (!targetAddr) return;
+
+    const updatedProfile = {
+      ...profileData,
+      defaultAddressIndex: index,
+    };
     setProfileData(updatedProfile);
     onSaveProfile(updatedProfile);
-    onSelectActiveAddress(newAddress);
+    onSelectActiveAddress(targetAddr);
+  };
+
+  const handleSaveMapAddress = (savedAddress: AddressDetails) => {
+    let updatedAddresses: AddressDetails[];
+    let newDefaultIndex = activeAddressIndex;
+
+    if (editingAddressIndex !== null && editingAddressIndex < profileData.savedAddresses.length) {
+      // Edit existing address
+      updatedAddresses = [...profileData.savedAddresses];
+      updatedAddresses[editingAddressIndex] = savedAddress;
+    } else {
+      // Add new address - automatically select newly added address as active!
+      updatedAddresses = [...profileData.savedAddresses, savedAddress];
+      newDefaultIndex = updatedAddresses.length - 1;
+    }
+
+    const updatedProfile = {
+      ...profileData,
+      savedAddresses: updatedAddresses,
+      defaultAddressIndex: newDefaultIndex,
+    };
+
+    setProfileData(updatedProfile);
+    onSaveProfile(updatedProfile);
+    onSelectActiveAddress(savedAddress);
+    setIsMapPickerOpen(false);
+    setEditingAddressIndex(null);
   };
 
   const handleDeleteAddress = (index: number) => {
     const updated = profileData.savedAddresses.filter((_, i) => i !== index);
+    const newDefaultIndex = updated.length <= 1 ? 0 : (index === activeAddressIndex ? 0 : (index < activeAddressIndex ? activeAddressIndex - 1 : activeAddressIndex));
+    
     const updatedProfile = {
       ...profileData,
       savedAddresses: updated,
-      defaultAddressIndex: Math.max(0, profileData.defaultAddressIndex - 1),
+      defaultAddressIndex: newDefaultIndex,
     };
     setProfileData(updatedProfile);
     onSaveProfile(updatedProfile);
+
+    if (updated.length > 0) {
+      onSelectActiveAddress(updated[newDefaultIndex] || updated[0]);
+    }
   };
 
   return (
@@ -229,7 +277,10 @@ export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
               <div className="flex justify-between items-center">
                 <h4 className="font-bold text-amber-300 uppercase tracking-wider">Saved Addresses</h4>
                 <button
-                  onClick={() => setIsMapPickerOpen(true)}
+                  onClick={() => {
+                    setEditingAddressIndex(null);
+                    setIsMapPickerOpen(true);
+                  }}
                   className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-extrabold px-3 py-1.5 rounded-xl flex items-center gap-1 text-xs shadow-md"
                 >
                   <Compass className="w-3.5 h-3.5" /> + Add via Map Picker
@@ -243,7 +294,11 @@ export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
                   {profileData.savedAddresses.map((addr, idx) => (
                     <div
                       key={idx}
-                      className="bg-emerald-900/40 p-3.5 rounded-2xl border border-emerald-800 flex justify-between items-center gap-3"
+                      className={`bg-emerald-900/40 p-3.5 rounded-2xl border flex justify-between items-center gap-3 transition-all ${
+                        idx === activeAddressIndex
+                          ? 'border-amber-400/90 ring-1 ring-amber-400/50'
+                          : 'border-emerald-800'
+                      }`}
                     >
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
@@ -257,18 +312,33 @@ export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {idx === activeAddressIndex ? (
+                          <div className="bg-amber-500 text-emerald-950 font-black px-3 py-1.5 rounded-xl text-[11px] flex items-center gap-1 shadow-sm">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-950" /> Active
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleSetActiveAddress(idx)}
+                            className="bg-emerald-800 hover:bg-emerald-700 text-amber-300 font-bold px-3 py-1.5 rounded-xl text-[11px] flex items-center gap-1 transition-colors"
+                          >
+                            Set Active
+                          </button>
+                        )}
+
                         <button
                           onClick={() => {
-                            onSelectActiveAddress(addr);
-                            onClose();
+                            setEditingAddressIndex(idx);
+                            setIsMapPickerOpen(true);
                           }}
-                          className="bg-emerald-800 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-[11px]"
+                          className="text-amber-400 hover:text-amber-300 p-1.5 hover:bg-amber-950/60 rounded-xl transition-colors"
+                          title="Edit Address"
                         >
-                          Use This
+                          <Edit3 className="w-4 h-4" />
                         </button>
+
                         <button
                           onClick={() => handleDeleteAddress(idx)}
-                          className="text-emerald-400 hover:text-red-400 p-1.5"
+                          className="text-red-400 hover:text-red-300 p-1.5 hover:bg-red-950/60 rounded-xl transition-colors"
                           title="Delete address"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -284,25 +354,150 @@ export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
           {/* STATS SUBTAB */}
           {activeSubTab === 'stats' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800 space-y-1">
+              {/* 2 CARDS GRID (DEFAULT PINCODE REMOVED) */}
+              <div className="grid grid-cols-2 gap-3 text-center">
+                
+                {/* 1. TOTAL ORDERS CARD */}
+                <div
+                  onClick={() => setActiveDetailCard(activeDetailCard === 'orders' ? null : 'orders')}
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer select-none space-y-1 transform hover:-translate-y-0.5 shadow-md ${
+                    activeDetailCard === 'orders'
+                      ? 'bg-emerald-900 border-amber-400 ring-2 ring-amber-400/50'
+                      : 'bg-emerald-900/40 hover:bg-emerald-900/60 border-emerald-800'
+                  }`}
+                >
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 font-extrabold px-2 py-0.5 rounded-full border border-amber-400/40 inline-block mb-0.5">
+                    💡 Click here for more details
+                  </span>
                   <Package className="w-5 h-5 text-amber-400 mx-auto" />
-                  <span className="text-[10px] text-emerald-300 block">Total Orders</span>
+                  <span className="text-[10px] text-emerald-300 font-bold block uppercase tracking-wider">Total Orders</span>
                   <strong className="text-xl text-white font-black">{orders.length}</strong>
                 </div>
 
-                <div className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800 space-y-1">
+                {/* 2. TOTAL SPENT CARD */}
+                <div
+                  onClick={() => setActiveDetailCard(activeDetailCard === 'spend' ? null : 'spend')}
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer select-none space-y-1 transform hover:-translate-y-0.5 shadow-md ${
+                    activeDetailCard === 'spend'
+                      ? 'bg-emerald-900 border-amber-400 ring-2 ring-amber-400/50'
+                      : 'bg-emerald-900/40 hover:bg-emerald-900/60 border-emerald-800'
+                  }`}
+                >
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 font-extrabold px-2 py-0.5 rounded-full border border-amber-400/40 inline-block mb-0.5">
+                    💡 Click here for more details
+                  </span>
                   <DollarSign className="w-5 h-5 text-emerald-400 mx-auto" />
-                  <span className="text-[10px] text-emerald-300 block">Total Spent</span>
+                  <span className="text-[10px] text-emerald-300 font-bold block uppercase tracking-wider">Total Spent</span>
                   <strong className="text-xl text-amber-300 font-black">₹{totalSpent}</strong>
                 </div>
 
-                <div className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800 space-y-1">
-                  <MapPin className="w-5 h-5 text-purple-400 mx-auto" />
-                  <span className="text-[10px] text-emerald-300 block">Active Address</span>
-                  <strong className="text-xs text-white font-bold block truncate">{profileData.savedAddresses[0]?.pincode || '560034'}</strong>
-                </div>
               </div>
+
+              {/* DYNAMIC CARD DETAIL BREAKDOWN PANELS */}
+              {activeDetailCard === 'orders' && (
+                <div className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/90 space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between border-b border-emerald-800 pb-2">
+                    <h4 className="font-extrabold text-amber-300 flex items-center gap-1.5 text-xs">
+                      <Package className="w-4 h-4 text-amber-400" /> Order Tracking & History ({orders.length})
+                    </h4>
+                    <button 
+                      onClick={() => setActiveDetailCard(null)}
+                      className="text-[10px] bg-emerald-800 hover:bg-emerald-700 text-emerald-200 font-bold px-2 py-0.5 rounded-lg"
+                    >
+                      Close ✕
+                    </button>
+                  </div>
+
+                  {orders.length === 0 ? (
+                    <p className="text-emerald-300 text-xs text-center py-2">No order history available yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {orders.map((o) => (
+                        <div key={o.id} className="bg-emerald-950/80 p-3 rounded-xl border border-emerald-800 flex justify-between items-center gap-2">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-white text-xs">Order #{o.id}</span>
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-900 text-emerald-300 border border-emerald-700">
+                                {o.status}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-emerald-200">
+                              {o.items.map(i => `${i.product.name} (x${i.quantity})`).join(', ')}
+                            </p>
+                          </div>
+                          <span className="text-xs font-black text-amber-300 shrink-0">₹{o.grandTotal}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeDetailCard === 'spend' && (
+                <div className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/90 space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between border-b border-emerald-800 pb-2">
+                    <h4 className="font-extrabold text-amber-300 flex items-center gap-1.5 text-xs">
+                      <DollarSign className="w-4 h-4 text-emerald-400" /> Monthly Spending Details
+                    </h4>
+                    <button 
+                      onClick={() => setActiveDetailCard(null)}
+                      className="text-[10px] bg-emerald-800 hover:bg-emerald-700 text-emerald-200 font-bold px-2 py-0.5 rounded-lg"
+                    >
+                      Close ✕
+                    </button>
+                  </div>
+
+                  {orders.filter(o => o.status !== 'Cancelled').length === 0 ? (
+                    <p className="text-emerald-300 text-xs text-center py-2">No spending data available yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {/* Monthly Summary Cards */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(
+                          orders.filter(o => o.status !== 'Cancelled').reduce((acc, order) => {
+                            const month = new Date(order.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                            acc[month] = (acc[month] || 0) + order.grandTotal;
+                            return acc;
+                          }, {} as Record<string, number>)
+                        ).map(([monthName, monthTotal]) => (
+                          <div key={monthName} className="bg-emerald-950 px-3 py-1 rounded-xl border border-emerald-700 text-[11px]">
+                            <span className="text-emerald-300 font-bold">{monthName}: </span>
+                            <strong className="text-amber-300 font-black">₹{monthTotal}</strong>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Strict 3-Column Table: Order Name, Delivered Date, Amount */}
+                      <div className="bg-emerald-950/80 rounded-xl border border-emerald-800 overflow-hidden">
+                        <table className="w-full text-left text-[11px]">
+                          <thead className="bg-emerald-900/80 text-amber-300 font-extrabold text-[9px] uppercase border-b border-emerald-800">
+                            <tr>
+                              <th className="px-3 py-2">Order Name</th>
+                              <th className="px-3 py-2">Delivered Date</th>
+                              <th className="px-3 py-2 text-right">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-emerald-800/60 text-emerald-100 font-medium">
+                            {orders.filter(o => o.status !== 'Cancelled').map((o) => (
+                              <tr key={o.id} className="hover:bg-emerald-900/40">
+                                <td className="px-3 py-2 font-bold text-white">
+                                  {o.items.map(i => i.product.name).join(', ')}
+                                </td>
+                                <td className="px-3 py-2 text-emerald-300">
+                                  {new Date(o.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </td>
+                                <td className="px-3 py-2 text-right font-black text-amber-300">
+                                  ₹{o.grandTotal}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800">
                 <h4 className="font-bold text-amber-300 uppercase tracking-wider mb-2">Member Perks</h4>
@@ -320,16 +515,23 @@ export const BuyerAccountModal: React.FC<BuyerAccountModalProps> = ({
         {/* Map Location Picker Submodal */}
         {isMapPickerOpen && (
           <MapLocationPicker
-            initialAddress={{
-              fullName: profileData.name,
-              phone: profileData.phone,
-              streetAddress: 'Koramangala 4th Block',
-              city: 'Bengaluru',
-              pincode: '560034',
-              estimatedDistanceKm: 3.5,
+            initialAddress={
+              editingAddressIndex !== null && profileData.savedAddresses[editingAddressIndex]
+                ? profileData.savedAddresses[editingAddressIndex]
+                : {
+                    fullName: profileData.name,
+                    phone: profileData.phone,
+                    streetAddress: '1st A Cross Rd, Basaveshwar Nagar',
+                    city: 'Bengaluru',
+                    pincode: '560079',
+                    estimatedDistanceKm: 6.5,
+                  }
+            }
+            onSelectLocation={handleSaveMapAddress}
+            onClose={() => {
+              setIsMapPickerOpen(false);
+              setEditingAddressIndex(null);
             }}
-            onSelectLocation={handleAddMapAddress}
-            onClose={() => setIsMapPickerOpen(false)}
           />
         )}
 

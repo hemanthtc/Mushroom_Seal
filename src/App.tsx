@@ -7,7 +7,8 @@ import type {
   CategoryType, 
   ToastMessage,
   UserProfile,
-  SellerProfile
+  SellerProfile,
+  TabType
 } from './types';
 import { 
   initializeStorage, 
@@ -41,6 +42,7 @@ import { AuthModal } from './components/auth/AuthModal';
 import { ProductCatalog } from './components/buyer/ProductCatalog';
 import { DistanceSelectorModal } from './components/buyer/DistanceSelectorModal';
 import { CartDrawer } from './components/buyer/CartDrawer';
+import { CartView } from './components/buyer/CartView';
 import { CheckoutModal } from './components/buyer/CheckoutModal';
 import { OrderTracker } from './components/buyer/OrderTracker';
 import { BuyerAccountModal } from './components/buyer/BuyerAccountModal';
@@ -72,7 +74,7 @@ export function App() {
   const [authModalRole, setAuthModalRole] = useState<'customer' | 'seller'>('customer');
 
   // Active navigation tab
-  const [activeTab, setActiveTab] = useState<'store' | 'orders' | 'dashboard' | 'products' | 'fulfillment' | 'policy' | 'profile'>('store');
+  const [activeTab, setActiveTab] = useState<TabType>('store');
   
   // App Data
   const [products, setProducts] = useState<Product[]>([]);
@@ -108,9 +110,6 @@ export function App() {
   useEffect(() => {
     initializeStorage();
     setProducts(getProducts());
-    setOrders(getOrders());
-    setCart(getCart());
-    setAddress(getUserAddress());
 
     // 1. Check Seller Session (sessionStorage - cleared on tab close)
     const activeSeller = getSellerSession();
@@ -118,6 +117,7 @@ export function App() {
       setSellerProfile(activeSeller);
       setAuthMode('seller');
       setActiveTab('dashboard');
+      setOrders(getOrders());
       return;
     }
 
@@ -127,11 +127,16 @@ export function App() {
       setUserProfile(activeCustomer);
       setAuthMode('customer');
       setActiveTab('store');
+      setCart(getCart(activeCustomer.phone));
+      setAddress(getUserAddress(activeCustomer.phone));
+      setOrders(getOrders(activeCustomer.phone));
       return;
     }
 
     // 3. Fallback to Guest Promotional View
     setAuthMode('guest');
+    setOrders([]);
+    setCart([]);
   }, []);
 
   // --- AUTHENTICATION HANDLERS ---
@@ -152,6 +157,9 @@ export function App() {
     setUserProfile(profile);
     setAuthMode('customer');
     setActiveTab('store');
+    setCart(getCart(profile.phone));
+    setAddress(getUserAddress(profile.phone));
+    setOrders(getOrders(profile.phone));
     addToast('success', `Welcome back, ${profile.name}! 7-Day Customer Session Active.`);
   };
 
@@ -160,15 +168,35 @@ export function App() {
     setSellerProfile(profile);
     setAuthMode('seller');
     setActiveTab('dashboard');
+    setOrders(getOrders());
     addToast('success', `Seller Authenticated! Active session bound to current browser tab.`);
   };
 
   const handleLogout = () => {
     clearAllSessions();
     setAuthMode('guest');
+    setCart([]);
+    setOrders([]);
     setIsBuyerAccountOpen(false);
     setIsSellerAccountOpen(false);
     addToast('info', 'Logged out successfully. Returned to promotional view.');
+  };
+
+  const handleDeleteCustomerAccount = () => {
+    clearAllSessions();
+    const emptyProfile: UserProfile = {
+      name: '',
+      phone: '',
+      email: '',
+      savedAddresses: [],
+      defaultAddressIndex: 0,
+    };
+    setUserProfile(emptyProfile);
+    saveUserProfile(emptyProfile);
+    setAuthMode('guest');
+    setActiveTab('store');
+    setIsBuyerAccountOpen(false);
+    addToast('warning', 'Customer account permanently deleted. Returned to promotional view.');
   };
 
   // --- CART FUNCTIONS ---
@@ -247,7 +275,7 @@ export function App() {
   // --- ORDER HANDLERS ---
   const handlePlaceOrder = (newOrder: Order) => {
     createOrder(newOrder);
-    setOrders(getOrders());
+    setOrders(getOrders(userProfile.phone));
     setProducts(getProducts());
     handleClearCart();
     setIsCheckoutOpen(false);
@@ -257,7 +285,11 @@ export function App() {
 
   const handleUpdateOrderStatus = (updatedOrder: Order) => {
     updateOrder(updatedOrder);
-    setOrders(getOrders());
+    if (authMode === 'seller') {
+      setOrders(getOrders());
+    } else {
+      setOrders(getOrders(userProfile.phone));
+    }
     addToast('info', `Order ${updatedOrder.id} status updated.`);
   };
 
@@ -340,9 +372,7 @@ export function App() {
         onOpenRegister={() => handleOpenRegister('customer')}
         onLogout={handleLogout}
         cartCount={totalCartCount}
-        openCart={() => setIsCartOpen(true)}
         address={address}
-        openDistanceModal={() => setIsDistanceModalOpen(true)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         searchQuery={searchQuery}
@@ -380,7 +410,6 @@ export function App() {
                 searchQuery={searchQuery}
                 address={address}
                 addToCart={handleAddToCart}
-                openDistanceModal={() => setIsDistanceModalOpen(true)}
               />
             )}
 
@@ -388,6 +417,20 @@ export function App() {
               <OrderTracker
                 orders={orders}
                 onUpdateOrder={handleUpdateOrderStatus}
+                onBackToStore={() => setActiveTab('store')}
+              />
+            )}
+
+            {activeTab === 'cart' && (
+              <CartView
+                cart={cart}
+                updateQuantity={handleUpdateCartQuantity}
+                removeFromCart={handleRemoveFromCart}
+                address={address}
+                proceedToCheckout={() => {
+                  setIsCheckoutOpen(true);
+                }}
+                onBackToStore={() => setActiveTab('store')}
               />
             )}
 
@@ -401,6 +444,7 @@ export function App() {
                   saveUserAddress(selectedAddr);
                 }}
                 onLogout={handleLogout}
+                onDeleteAccount={handleDeleteCustomerAccount}
               />
             )}
           </>
@@ -447,7 +491,6 @@ export function App() {
                   searchQuery={searchQuery}
                   address={address}
                   addToCart={handleAddToCart}
-                  openDistanceModal={() => setIsDistanceModalOpen(true)}
                 />
               </div>
             )}
@@ -495,10 +538,10 @@ export function App() {
         />
       )}
 
-      {/* CART DRAWER */}
-      {isCartOpen && (
+      {/* CART DRAWER (SUPPRESSED WHEN IN DEDICATED CART VIEW) */}
+      {isCartOpen && (activeTab as string) !== 'cart' && (
         <CartDrawer
-          isOpen={isCartOpen}
+          isOpen={isCartOpen && (activeTab as string) !== 'cart'}
           onClose={() => setIsCartOpen(false)}
           cart={cart}
           updateQuantity={handleUpdateCartQuantity}
@@ -508,7 +551,6 @@ export function App() {
             setIsCartOpen(false);
             setIsCheckoutOpen(true);
           }}
-          openDistanceModal={() => setIsDistanceModalOpen(true)}
         />
       )}
 

@@ -10,9 +10,10 @@ import {
   User,
   LogOut,
   Lock,
-  UserPlus
+  UserPlus,
+  Home
 } from 'lucide-react';
-import type { AddressDetails, UserProfile, SellerProfile } from '../types';
+import type { AddressDetails, UserProfile, SellerProfile, TabType } from '../types';
 
 interface HeaderProps {
   authMode: 'guest' | 'customer' | 'seller';
@@ -21,12 +22,10 @@ interface HeaderProps {
   onLogout: () => void;
   
   cartCount: number;
-  openCart: () => void;
   address: AddressDetails;
-  openDistanceModal: () => void;
   
-  activeTab: string;
-  setActiveTab: (tab: 'store' | 'orders' | 'dashboard' | 'products' | 'fulfillment' | 'policy' | 'profile') => void;
+  activeTab: TabType;
+  setActiveTab: (tab: TabType) => void;
   
   searchQuery: string;
   setSearchQuery: (q: string) => void;
@@ -43,9 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRegister,
   onLogout,
   cartCount,
-  openCart,
   address,
-  openDistanceModal,
   activeTab,
   setActiveTab,
   searchQuery,
@@ -58,25 +55,23 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-emerald-950/90 backdrop-blur-md border-b border-emerald-800/40 text-emerald-50 shadow-xl">
       
-      {/* TOP BANNER */}
-      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-emerald-950 px-4 py-1.5 text-xs border-b border-emerald-800/30 flex justify-between items-center text-emerald-200">
-        <div className="flex items-center gap-2 max-w-xl truncate">
-          <span className="inline-flex items-center gap-1 bg-emerald-800/60 text-emerald-300 px-2 py-0.5 rounded-full font-medium text-[11px] border border-emerald-700/50">
-            <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" /> Local Farm Direct
+      {/* TOP ANNOUNCEMENT BAR */}
+      <div className="bg-emerald-950 text-emerald-200 text-xs px-4 py-1 border-b border-emerald-800/60 flex items-center justify-between">
+        <div className="flex items-center gap-2 max-w-7xl mx-auto w-full">
+          <span className="bg-amber-400/20 text-amber-300 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-amber-400/30 flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-amber-400" /> Local Farm Direct
           </span>
           <span className="hidden sm:inline text-emerald-300/80">• 100% Certified Organic Harvests</span>
         </div>
 
-        <button 
-          onClick={openDistanceModal}
-          className="flex items-center gap-1.5 hover:text-amber-300 transition-colors bg-emerald-900/80 px-2.5 py-0.5 rounded-full border border-emerald-700/60 text-[11px]"
-          title="Change location and calculate distance to farm"
+        <div 
+          className="flex items-center gap-1.5 bg-emerald-900/80 px-2.5 py-0.5 rounded-full border border-emerald-700/60 text-[11px]"
+          title="Farm delivery distance calculated automatically based on active delivery location"
         >
           <MapPin className="w-3.5 h-3.5 text-amber-400" />
           <span>Location: <strong className="text-white">{address.pincode}</strong></span>
           <span className="text-emerald-400 font-semibold">({address.estimatedDistanceKm} km)</span>
-          <span className="text-amber-400 underline font-medium ml-1">Change</span>
-        </button>
+        </div>
       </div>
 
       {/* MAIN NAVIGATION HEADER */}
@@ -84,26 +79,39 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center justify-between gap-4">
           
           {/* Logo */}
-          <div 
-            className="flex items-center gap-3 cursor-pointer select-none" 
-            onClick={() => setActiveTab(authMode === 'seller' ? 'dashboard' : 'store')}
-          >
-            <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 shadow-md shadow-emerald-900/50 text-white font-bold">
-              <Sprout className="w-6 h-6 text-emerald-100 transform -rotate-12" />
-              <div className="absolute -bottom-1 -right-1 bg-amber-500 text-emerald-950 font-black text-[9px] px-1 rounded-full border border-white">
-                FARM
+          <div className="flex items-center gap-4">
+            <div 
+              onClick={() => setActiveTab(authMode === 'seller' ? 'dashboard' : 'store')}
+              className="flex items-center gap-2.5 cursor-pointer group"
+            >
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-emerald-950 font-black shadow-lg border border-emerald-300/40 group-hover:scale-105 transition-transform">
+                <Sprout className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1">
+                  <span className="font-extrabold text-base tracking-tight text-white group-hover:text-amber-300 transition-colors">
+                    Shroom & Veggies
+                  </span>
+                  <span className="bg-amber-400 text-emerald-950 font-black text-[9px] px-1.5 py-0.2 rounded uppercase tracking-wider">
+                    Farm
+                  </span>
+                </div>
+                <p className="text-[10px] text-emerald-300 font-medium -mt-0.5">
+                  {authMode === 'seller' ? 'Seller Vendor Hub' : 'Customer Storefront'}
+                </p>
               </div>
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-emerald-100 via-amber-100 to-emerald-200 bg-clip-text text-transparent">
-                  Shroom & Veggies
-                </h1>
+
+            {/* Location Delivery Indicator (Customer mode - Read Only) */}
+            {authMode === 'customer' && (
+              <div
+                className="hidden lg:flex items-center gap-1.5 bg-emerald-900/40 px-3 py-1.5 rounded-xl border border-emerald-700/60 text-xs text-emerald-200 shadow-inner"
+                title="Seller-configured farm delivery distance"
+              >
+                <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Location: <strong className="text-white">{address.pincode}</strong> ({address.estimatedDistanceKm} km)</span>
               </div>
-              <p className="text-[11px] text-emerald-400 font-medium tracking-wide">
-                {authMode === 'seller' ? 'Farmer Vendor Portal' : authMode === 'customer' ? 'Customer Storefront' : 'Organic Farm Marketplace'}
-              </p>
-            </div>
+            )}
           </div>
 
           {/* Search Bar (Shown only in Customer mode) */}
@@ -147,6 +155,19 @@ export const Header: React.FC<HeaderProps> = ({
             {/* 2. CUSTOMER MODE CONTROLS */}
             {authMode === 'customer' && (
               <div className="flex items-center gap-2">
+                {/* HOME BUTTON */}
+                <button
+                  onClick={() => setActiveTab('store')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${
+                    activeTab === 'store'
+                      ? 'bg-emerald-800 border-amber-400 text-amber-300 font-bold'
+                      : 'bg-emerald-900/60 border-emerald-800 text-emerald-200 hover:bg-emerald-800'
+                  }`}
+                >
+                  <Home className="w-4 h-4 text-amber-400" />
+                  <span className="hidden sm:inline">Home</span>
+                </button>
+
                 <button
                   onClick={() => setActiveTab('orders')}
                   className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${
@@ -165,8 +186,12 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
 
                 <button
-                  onClick={openCart}
-                  className="relative flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-bold px-3.5 py-2 rounded-xl shadow-lg text-xs transition-all transform active:scale-95"
+                  onClick={() => setActiveTab('cart')}
+                  className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl shadow-lg text-xs font-bold transition-all transform active:scale-95 ${
+                    activeTab === 'cart'
+                      ? 'bg-amber-400 text-emerald-950 font-black ring-2 ring-amber-400/50'
+                      : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950'
+                  }`}
                 >
                   <ShoppingBag className="w-4 h-4" />
                   <span className="hidden sm:inline">Cart</span>

@@ -12,7 +12,6 @@ import {
   AlertTriangle, 
   Truck, 
   Sparkles,
-  ChevronRight,
   ShieldCheck,
   Maximize2,
   Info
@@ -27,7 +26,6 @@ interface ProductCatalogProps {
   searchQuery: string;
   address: AddressDetails;
   addToCart: (product: Product, quantity?: number) => void;
-  openDistanceModal: () => void;
 }
 
 export const ProductCatalog: React.FC<ProductCatalogProps> = ({
@@ -38,7 +36,6 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   searchQuery,
   address,
   addToCart,
-  openDistanceModal,
 }) => {
   const [selectedProductDetail, setSelectedProductDetail] = useState<Product | null>(null);
   const [addedAnimationId, setAddedAnimationId] = useState<string | null>(null);
@@ -91,12 +88,6 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
               <span>Zero Chemicals • 100% Traceable</span>
             </div>
-            <button 
-              onClick={openDistanceModal}
-              className="text-amber-400 hover:text-amber-300 font-bold underline flex items-center gap-1"
-            >
-              Adjust Distance/Pincode <ChevronRight className="w-3.5 h-3.5" />
-            </button>
           </div>
         </div>
       </div>
