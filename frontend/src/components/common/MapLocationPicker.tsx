@@ -364,7 +364,7 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
       <div className="bg-emerald-950 border border-emerald-700/80 rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl text-emerald-100 flex flex-col max-h-[92vh]">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-emerald-950 p-5 border-b border-emerald-800 flex items-center justify-between">
+        <div className="relative z-20 bg-gradient-to-r from-emerald-900 via-teal-900 to-emerald-950 p-5 border-b border-emerald-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-emerald-800/80 rounded-2xl border border-emerald-700 text-amber-400">
               <Compass className="w-6 h-6 animate-spin-slow" />
@@ -376,7 +376,7 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
               <p className="text-xs text-emerald-300">Live GPS pinpointing & exact farm distance calculation</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-emerald-400 hover:text-white rounded-lg hover:bg-emerald-800 text-lg font-bold">
+          <button type="button" onClick={onClose} className="relative z-30 p-1.5 text-emerald-400 hover:text-white rounded-lg hover:bg-emerald-800 text-lg font-bold">
             ✕
           </button>
         </div>
@@ -798,17 +798,17 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center justify-end gap-3 pt-2">
+          <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-emerald-950 border-t border-emerald-800 flex items-center justify-end gap-3 z-20">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 font-bold text-emerald-300 hover:text-white"
+              className="relative z-20 px-4 py-2 font-bold text-emerald-300 hover:text-white"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-black px-6 py-2.5 rounded-xl shadow-lg flex items-center gap-1.5 text-xs transition-all"
+              className="relative z-20 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-black px-6 py-2.5 rounded-xl shadow-lg flex items-center gap-1.5 text-xs transition-all"
             >
               <CheckCircle className="w-4 h-4" /> Confirm Google Maps Location
             </button>

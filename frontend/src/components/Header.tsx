@@ -11,14 +11,19 @@ import {
   LogOut,
   Lock,
   UserPlus,
-  Home
+  Home,
+  Bike,
+  Truck,
+  Clock
 } from 'lucide-react';
-import type { AddressDetails, UserProfile, SellerProfile, TabType } from '../types';
+import type { AddressDetails, UserProfile, SellerProfile, DeliveryAgent, TabType } from '../types';
 
 interface HeaderProps {
-  authMode: 'guest' | 'customer' | 'seller';
+  authMode: 'guest' | 'customer' | 'seller' | 'delivery';
   onOpenLogin: () => void;
   onOpenRegister: () => void;
+  onOpenDeliveryLogin: () => void;
+  onOpenLocationPicker: () => void;
   onLogout: () => void;
   
   cartCount: number;
@@ -33,6 +38,7 @@ interface HeaderProps {
   
   userProfile?: UserProfile;
   sellerProfile?: SellerProfile;
+  deliveryAgent?: DeliveryAgent;
   openAccountModal: () => void;
 }
 
@@ -40,6 +46,8 @@ export const Header: React.FC<HeaderProps> = ({
   authMode,
   onOpenLogin,
   onOpenRegister,
+  onOpenDeliveryLogin,
+  onOpenLocationPicker,
   onLogout,
   cartCount,
   address,
@@ -50,6 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeOrdersCount,
   userProfile,
   sellerProfile,
+  deliveryAgent,
   openAccountModal
 }) => {
   return (
@@ -64,14 +73,16 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="hidden sm:inline text-emerald-300/80">• 100% Certified Organic Harvests</span>
         </div>
 
-        <div 
-          className="flex items-center gap-1.5 bg-emerald-900/80 px-2.5 py-0.5 rounded-full border border-emerald-700/60 text-[11px]"
-          title="Farm delivery distance calculated automatically based on active delivery location"
+        <button
+          onClick={authMode === 'customer' ? onOpenLocationPicker : undefined}
+          className={`flex items-center gap-1.5 bg-emerald-900/80 px-2.5 py-0.5 rounded-full border border-emerald-700/60 text-[11px] ${authMode === 'customer' ? 'hover:border-amber-400 cursor-pointer' : 'cursor-default'}`}
+          title={authMode === 'customer' ? 'Tap to change delivery location' : 'Delivery location'}
+          data-testid="open-location-picker-top"
         >
           <MapPin className="w-3.5 h-3.5 text-amber-400" />
           <span>Location: <strong className="text-white">{address.pincode}</strong></span>
           <span className="text-emerald-400 font-semibold">({address.estimatedDistanceKm} km)</span>
-        </div>
+        </button>
       </div>
 
       {/* MAIN NAVIGATION HEADER */}
@@ -81,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Logo */}
           <div className="flex items-center gap-4">
             <div 
-              onClick={() => setActiveTab(authMode === 'seller' ? 'dashboard' : 'store')}
+              onClick={() => setActiveTab(authMode === 'seller' ? 'dashboard' : authMode === 'delivery' ? 'delivery' : 'store')}
               className="flex items-center gap-2.5 cursor-pointer group"
             >
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-emerald-950 font-black shadow-lg border border-emerald-300/40 group-hover:scale-105 transition-transform">
@@ -97,20 +108,23 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </div>
                 <p className="text-[10px] text-emerald-300 font-medium -mt-0.5">
-                  {authMode === 'seller' ? 'Seller Vendor Hub' : 'Customer Storefront'}
+                  {authMode === 'seller' ? 'Seller Vendor Hub' : authMode === 'delivery' ? 'Delivery Partner Hub' : 'Customer Storefront'}
                 </p>
               </div>
             </div>
 
-            {/* Location Delivery Indicator (Customer mode - Read Only) */}
+            {/* Location Delivery Indicator (Customer mode - click to change) */}
             {authMode === 'customer' && (
-              <div
-                className="hidden lg:flex items-center gap-1.5 bg-emerald-900/40 px-3 py-1.5 rounded-xl border border-emerald-700/60 text-xs text-emerald-200 shadow-inner"
-                title="Seller-configured farm delivery distance"
+              <button
+                onClick={onOpenLocationPicker}
+                className="hidden lg:flex items-center gap-1.5 bg-emerald-900/40 hover:bg-emerald-800 px-3 py-1.5 rounded-xl border border-emerald-700/60 hover:border-amber-400 text-xs text-emerald-200 shadow-inner transition-all group"
+                title="Change your delivery location & address"
+                data-testid="open-location-picker"
               >
                 <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>Location: <strong className="text-white">{address.pincode}</strong> ({address.estimatedDistanceKm} km)</span>
-              </div>
+                <span>Deliver to: <strong className="text-white">{address.pincode}</strong> ({address.estimatedDistanceKm} km)</span>
+                <span className="text-amber-400 font-bold group-hover:underline">Change</span>
+              </button>
             )}
           </div>
 
@@ -135,6 +149,15 @@ export const Header: React.FC<HeaderProps> = ({
             {authMode === 'guest' && (
               <div className="flex items-center gap-2">
                 <button
+                  onClick={onOpenDeliveryLogin}
+                  className="hidden sm:flex items-center gap-1.5 bg-emerald-900/90 hover:bg-emerald-800 text-emerald-200 hover:text-amber-300 font-bold px-3.5 py-2 rounded-xl border border-emerald-700 text-xs transition-all shadow-md"
+                  data-testid="guest-delivery-login-btn"
+                >
+                  <Bike className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Delivery Partner</span>
+                </button>
+
+                <button
                   onClick={onOpenLogin}
                   className="flex items-center gap-1.5 bg-emerald-900/90 hover:bg-emerald-800 text-amber-300 font-bold px-3.5 py-2 rounded-xl border border-emerald-700 text-xs transition-all shadow-md"
                 >
@@ -149,6 +172,57 @@ export const Header: React.FC<HeaderProps> = ({
                   <UserPlus className="w-3.5 h-3.5" />
                   <span>Register</span>
                 </button>
+              </div>
+            )}
+
+            {/* DELIVERY MODE CONTROLS */}
+            {authMode === 'delivery' && (
+              <div className="flex items-center gap-2">
+                <div className="hidden md:flex items-center gap-1">
+                  <button
+                    onClick={() => setActiveTab('delivery')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      activeTab === 'delivery' ? 'bg-emerald-800 text-amber-300 font-bold' : 'text-emerald-300 hover:text-white'
+                    }`}
+                    data-testid="nav-delivery-active"
+                  >
+                    <Truck className="w-4 h-4 text-amber-400" /> Active
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('delivery-jobs')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      activeTab === 'delivery-jobs' ? 'bg-emerald-800 text-amber-300 font-bold' : 'text-emerald-300 hover:text-white'
+                    }`}
+                    data-testid="nav-delivery-jobs"
+                  >
+                    <Package className="w-4 h-4 text-amber-400" /> Available Jobs
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('delivery-history')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      activeTab === 'delivery-history' ? 'bg-emerald-800 text-amber-300 font-bold' : 'text-emerald-300 hover:text-white'
+                    }`}
+                    data-testid="nav-delivery-history"
+                  >
+                    <Clock className="w-4 h-4 text-amber-400" /> History
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5 bg-emerald-900/80 rounded-xl border border-emerald-700/80 p-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-100 px-2 py-1">
+                    <Bike className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden lg:inline">{deliveryAgent?.name || 'Rider'}</span>
+                    <span className="font-mono text-[10px] text-amber-300">{deliveryAgent?.agentId}</span>
+                  </div>
+                  <button
+                    onClick={onLogout}
+                    className="p-1 text-red-400 hover:text-red-300 hover:bg-red-950/60 rounded-lg transition-colors"
+                    title="Log Out Delivery Session"
+                    data-testid="delivery-logout-btn"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             )}
 

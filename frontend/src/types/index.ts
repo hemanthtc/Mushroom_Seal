@@ -14,7 +14,27 @@ export type TabType =
   | 'products' 
   | 'fulfillment' 
   | 'policy' 
-  | 'profile';
+  | 'profile'
+  | 'delivery'
+  | 'delivery-jobs'
+  | 'delivery-history';
+
+export type DeliveryStage =
+  | 'Unassigned'
+  | 'Assigned'
+  | 'Picked Up'
+  | 'Arrived'
+  | 'Delivered';
+
+export interface DeliveryAgent {
+  agentId: string;
+  name: string;
+  phone: string;
+  vehicle: string;
+  vehicleNumber: string;
+  rating: number;
+  zone: string;
+}
 
 export interface DistanceRules {
   maxQtyKm5: number;   // Within 5 km
@@ -96,6 +116,14 @@ export interface Order {
   refundAmount?: number;
   refundType?: 'Online Razorpay Refund' | 'COD No Refund';
   refundId?: string;
+  // --- Delivery / logistics fields ---
+  deliveryOtp?: string;
+  deliveryStage?: DeliveryStage;
+  assignedAgentId?: string;
+  assignedAgentName?: string;
+  assignedAgentPhone?: string;
+  codCollected?: boolean;
+  sellerId?: string;
 }
 
 export interface UserProfile {

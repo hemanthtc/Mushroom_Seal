@@ -47,6 +47,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return 'ORD-' + Math.floor(10000 + Math.random() * 90000);
   };
 
+  const generateDeliveryOtp = (): string => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
+
   const handlePlaceOrder = (paymentId: string, isPaid: boolean) => {
     setIsSubmitting(true);
     const newOrder: Order = {
@@ -61,6 +65,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       paymentId: paymentId || 'COD_' + Date.now(),
       isPaid,
       createdAt: new Date().toISOString(),
+      deliveryOtp: generateDeliveryOtp(),
+      deliveryStage: 'Unassigned',
+      codCollected: false,
       statusTimeline: [
         {
           status: 'Pending',
@@ -209,7 +216,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <span className="font-bold text-sm text-white">Cash on Delivery</span>
                   <Banknote className="w-4 h-4 text-emerald-400" />
                 </div>
-                <p className="text-[11px] text-emerald-300 mt-1">Pay with cash or UPI at the time of delivery</p>
+                <p className="text-[11px] text-emerald-300 mt-1">Pay cash/UPI on delivery • Show your secure QR + OTP to confirm payment</p>
               </button>
             </div>
           </div>

@@ -8,6 +8,7 @@ import type {
   ToastMessage,
   UserProfile,
   SellerProfile,
+  DeliveryAgent,
   TabType
 } from './types';
 import { 
@@ -32,6 +33,8 @@ import {
   getCustomerSession,
   saveSellerSession,
   getSellerSession,
+  saveDeliverySession,
+  getDeliverySession,
   clearAllSessions
 } from './services/storage';
 
@@ -54,6 +57,8 @@ import { SellerOrders } from './components/seller/SellerOrders';
 import { DistancePolicyConfig } from './components/seller/DistancePolicyConfig';
 import { SellerAccountModal } from './components/seller/SellerAccountModal';
 
+import { DeliveryPortal } from './components/delivery/DeliveryPortal';
+
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 import '../Mushroom.css';
 
@@ -68,10 +73,11 @@ const CATEGORIES: CategoryType[] = [
 
 export function App() {
   // Authentication & Session State
-  const [authMode, setAuthMode] = useState<'guest' | 'customer' | 'seller'>('guest');
+  const [authMode, setAuthMode] = useState<'guest' | 'customer' | 'seller' | 'delivery'>('guest');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
-  const [authModalRole, setAuthModalRole] = useState<'customer' | 'seller'>('customer');
+  const [authModalRole, setAuthModalRole] = useState<'customer' | 'seller' | 'delivery'>('customer');
+  const [deliveryAgent, setDeliveryAgent] = useState<DeliveryAgent | null>(null);
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<TabType>('store');
@@ -99,7 +105,7 @@ export function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const addToast = (type: ToastMessage['type'], text: string) => {
-    const id = Date.now().toString();
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setToasts((prev) => [...prev, { id, type, text }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -117,6 +123,16 @@ export function App() {
       setSellerProfile(activeSeller);
       setAuthMode('seller');
       setActiveTab('dashboard');
+      setOrders(getOrders());
+      return;
+    }
+
+    // 1b. Check Delivery Session (sessionStorage)
+    const activeDelivery = getDeliverySession();
+    if (activeDelivery) {
+      setDeliveryAgent(activeDelivery);
+      setAuthMode('delivery');
+      setActiveTab('delivery');
       setOrders(getOrders());
       return;
     }
@@ -140,7 +156,7 @@ export function App() {
   }, []);
 
   // --- AUTHENTICATION HANDLERS ---
-  const handleOpenLogin = (role: 'customer' | 'seller' = 'customer') => {
+  const handleOpenLogin = (role: 'customer' | 'seller' | 'delivery' = 'customer') => {
     setAuthModalTab('login');
     setAuthModalRole(role);
     setIsAuthModalOpen(true);
@@ -172,9 +188,19 @@ export function App() {
     addToast('success', `Seller Authenticated! Active session bound to current browser tab.`);
   };
 
+  const handleDeliveryLoginSuccess = (agent: DeliveryAgent) => {
+    saveDeliverySession(agent);
+    setDeliveryAgent(agent);
+    setAuthMode('delivery');
+    setActiveTab('delivery');
+    setOrders(getOrders());
+    addToast('success', `Welcome ${agent.name}! Delivery partner session active.`);
+  };
+
   const handleLogout = () => {
     clearAllSessions();
     setAuthMode('guest');
+    setDeliveryAgent(null);
     setCart([]);
     setOrders([]);
     setIsBuyerAccountOpen(false);
@@ -285,12 +311,15 @@ export function App() {
 
   const handleUpdateOrderStatus = (updatedOrder: Order) => {
     updateOrder(updatedOrder);
-    if (authMode === 'seller') {
+    if (authMode === 'seller' || authMode === 'delivery') {
       setOrders(getOrders());
     } else {
       setOrders(getOrders(userProfile.phone));
     }
-    addToast('info', `Order ${updatedOrder.id} status updated.`);
+    // Delivery portal shows its own contextual toasts; avoid duplicate spam.
+    if (authMode !== 'delivery') {
+      addToast('info', `Order ${updatedOrder.id} status updated.`);
+    }
   };
 
   // --- SELLER PRODUCT MANAGER HANDLERS ---
@@ -370,6 +399,8 @@ export function App() {
         authMode={authMode}
         onOpenLogin={() => handleOpenLogin('customer')}
         onOpenRegister={() => handleOpenRegister('customer')}
+        onOpenDeliveryLogin={() => handleOpenLogin('delivery')}
+        onOpenLocationPicker={() => setIsDistanceModalOpen(true)}
         onLogout={handleLogout}
         cartCount={totalCartCount}
         address={address}
@@ -380,6 +411,7 @@ export function App() {
         activeOrdersCount={activeOrdersCount}
         userProfile={userProfile}
         sellerProfile={sellerProfile}
+        deliveryAgent={deliveryAgent || undefined}
         openAccountModal={() => {
           if (authMode === 'customer') setActiveTab('profile');
           if (authMode === 'seller') setIsSellerAccountOpen(true);
@@ -508,6 +540,17 @@ export function App() {
           </>
         )}
 
+        {/* 4. DELIVERY PARTNER INTERFACE */}
+        {authMode === 'delivery' && deliveryAgent && (
+          <DeliveryPortal
+            view={activeTab}
+            agent={deliveryAgent}
+            orders={orders}
+            onUpdateOrder={handleUpdateOrderStatus}
+            addToast={addToast}
+          />
+        )}
+
       </main>
 
       {/* AUTH MODAL (LOGIN & REGISTRATION) */}
@@ -526,6 +569,7 @@ export function App() {
           onSellerRegisterSuccess={(msg) => {
             addToast('info', msg);
           }}
+          onDeliveryLoginSuccess={handleDeliveryLoginSuccess}
         />
       )}
 

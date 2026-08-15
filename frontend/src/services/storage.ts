@@ -1,4 +1,4 @@
-import type { Product, Order, CartItem, AddressDetails, UserProfile, SellerProfile } from '../types';
+import type { Product, Order, CartItem, AddressDetails, UserProfile, SellerProfile, DeliveryAgent } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_ORDERS } from '../data/mockData';
 
 const PRODUCTS_KEY = 'mushroom_veggies_products';
@@ -10,6 +10,8 @@ const USER_PROFILE_KEY = 'mushroom_veggies_user_profile';
 const SELLER_PROFILE_KEY = 'mushroom_veggies_seller_profile';
 const CUSTOMER_SESSION_EXPIRY_KEY = 'mushroom_veggies_customer_expiry';
 const SELLER_SESSION_KEY = 'mushroom_veggies_seller_session';
+const DELIVERY_SESSION_KEY = 'mushroom_veggies_delivery_session';
+const DELIVERY_TOKEN_KEY = 'delivery_token';
 const CUSTOMER_TOKEN_KEY = 'customer_token';
 const SELLER_TOKEN_KEY = 'seller_token';
 const ACTIVE_CUST_PHONE_KEY = 'mushroom_veggies_active_cust_phone';
@@ -161,9 +163,73 @@ export const clearSellerSession = (): void => {
   sessionStorage.removeItem(SELLER_SESSION_KEY);
 };
 
+// --- DELIVERY AGENT DIRECTORY & SESSION ---
+export const DEFAULT_DELIVERY_AGENTS: DeliveryAgent[] = [
+  {
+    agentId: 'RIDER-001',
+    name: 'Arjun Kumar',
+    phone: '+91 90080 11223',
+    vehicle: 'Electric Scooter',
+    vehicleNumber: 'KA-05-EG-4412',
+    rating: 4.8,
+    zone: 'South Bengaluru',
+  },
+  {
+    agentId: 'RIDER-002',
+    name: 'Priya Nair',
+    phone: '+91 90080 55667',
+    vehicle: 'Insulated Cold-Box Bike',
+    vehicleNumber: 'KA-03-HH-9021',
+    rating: 4.9,
+    zone: 'East Bengaluru',
+  },
+];
+
+const DELIVERY_AGENTS_KEY = 'mushroom_veggies_delivery_agents';
+
+export const getDeliveryAgents = (): DeliveryAgent[] => {
+  try {
+    const data = localStorage.getItem(DELIVERY_AGENTS_KEY);
+    return data ? JSON.parse(data) : DEFAULT_DELIVERY_AGENTS;
+  } catch {
+    return DEFAULT_DELIVERY_AGENTS;
+  }
+};
+
+export const saveDeliveryAgents = (agents: DeliveryAgent[]): void => {
+  localStorage.setItem(DELIVERY_AGENTS_KEY, JSON.stringify(agents));
+};
+
+export const findDeliveryAgent = (agentId: string): DeliveryAgent | undefined => {
+  const clean = agentId.trim().toUpperCase();
+  return getDeliveryAgents().find((a) => a.agentId.toUpperCase() === clean);
+};
+
+export const saveDeliverySession = (agent: DeliveryAgent, token = 'delivery_jwt_token_active'): void => {
+  sessionStorage.setItem(DELIVERY_TOKEN_KEY, token);
+  sessionStorage.setItem(DELIVERY_SESSION_KEY, JSON.stringify(agent));
+};
+
+export const getDeliverySession = (): DeliveryAgent | null => {
+  const token = sessionStorage.getItem(DELIVERY_TOKEN_KEY);
+  const data = sessionStorage.getItem(DELIVERY_SESSION_KEY);
+  if (!token || !data) return null;
+  try {
+    return JSON.parse(data) as DeliveryAgent;
+  } catch {
+    return null;
+  }
+};
+
+export const clearDeliverySession = (): void => {
+  sessionStorage.removeItem(DELIVERY_TOKEN_KEY);
+  sessionStorage.removeItem(DELIVERY_SESSION_KEY);
+};
+
 export const clearAllSessions = (): void => {
   clearCustomerSession();
   clearSellerSession();
+  clearDeliverySession();
 };
 
 // User Profile CRUD (Isolated per phone)
@@ -306,6 +372,10 @@ export const getDynamicDistanceForAddress = (address: AddressDetails): number =>
   if (address.latitude && address.longitude) {
     return calculateKmDistance(address.latitude, address.longitude, seller.latitude, seller.longitude);
   }
+  // No precise coordinates: respect a manually-entered custom distance first
+  if (address.estimatedDistanceKm && address.estimatedDistanceKm > 0) {
+    return address.estimatedDistanceKm;
+  }
   // Pincode based lookup fallback if lat/lng missing
   const pincodeMap: Record<string, number> = {
     '560034': 4.5,
@@ -316,7 +386,7 @@ export const getDynamicDistanceForAddress = (address: AddressDetails): number =>
     '560300': 30.0,
     '562157': 35.0,
   };
-  return pincodeMap[address.pincode] || address.estimatedDistanceKm || 30.0;
+  return pincodeMap[address.pincode] || 30.0;
 };
 
 export const getUserAddress = (phone?: string): AddressDetails => {

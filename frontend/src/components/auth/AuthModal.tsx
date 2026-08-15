@@ -12,19 +12,23 @@ import {
   ShieldCheck, 
   ArrowRight,
   Eye,
-  EyeOff
+  EyeOff,
+  Bike,
+  Truck
 } from 'lucide-react';
-import type { UserProfile, SellerProfile, AddressDetails } from '../../types';
+import type { UserProfile, SellerProfile, AddressDetails, DeliveryAgent } from '../../types';
+import { findDeliveryAgent } from '../../services/storage';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: 'login' | 'register';
-  initialRole?: 'customer' | 'seller';
+  initialRole?: 'customer' | 'seller' | 'delivery';
   onCustomerLoginSuccess: (profile: UserProfile) => void;
   onSellerLoginSuccess: (profile: SellerProfile) => void;
   onCustomerRegisterSuccess: (profile: UserProfile) => void;
   onSellerRegisterSuccess: (message: string) => void;
+  onDeliveryLoginSuccess: (agent: DeliveryAgent) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -36,9 +40,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onSellerLoginSuccess,
   onCustomerRegisterSuccess,
   onSellerRegisterSuccess,
+  onDeliveryLoginSuccess,
 }) => {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>(initialTab);
-  const [roleTab, setRoleTab] = useState<'customer' | 'seller'>(initialRole);
+  const [roleTab, setRoleTab] = useState<'customer' | 'seller' | 'delivery'>(initialRole);
+
+  // Delivery partner login states
+  const [deliveryId, setDeliveryId] = useState('RIDER-001');
+  const [deliveryPassword, setDeliveryPassword] = useState('Rider123');
+  const [showDeliveryPassword, setShowDeliveryPassword] = useState(false);
 
   // Customer Login States
   const [custPhone, setCustPhone] = useState('+91 98450 12345');
@@ -151,6 +161,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     };
 
     onSellerLoginSuccess(profile);
+    onClose();
+  };
+
+  const handleDeliveryLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    if (!deliveryId || !deliveryPassword) {
+      setErrorMsg('Please enter your Delivery Partner ID and password.');
+      return;
+    }
+    const known = findDeliveryAgent(deliveryId);
+    const agent: DeliveryAgent = known || {
+      agentId: deliveryId.trim().toUpperCase(),
+      name: 'Delivery Partner',
+      phone: '+91 90000 00000',
+      vehicle: 'Delivery Bike',
+      vehicleNumber: 'KA-00-XX-0000',
+      rating: 4.5,
+      zone: 'Bengaluru',
+    };
+    onDeliveryLoginSuccess(agent);
     onClose();
   };
 
@@ -295,6 +326,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             >
               <Store className="w-3.5 h-3.5" />
               <span>Seller / Vendor</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setRoleTab('delivery');
+                setActiveTab('login');
+                setErrorMsg('');
+              }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold border transition-all ${
+                roleTab === 'delivery'
+                  ? 'bg-emerald-800 border-amber-400 text-amber-300 shadow-sm'
+                  : 'bg-emerald-900/30 border-emerald-800 text-emerald-300 hover:text-white'
+              }`}
+              data-testid="auth-role-delivery"
+            >
+              <Bike className="w-3.5 h-3.5" />
+              <span>Delivery</span>
             </button>
           </div>
         )}
@@ -518,6 +566,64 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </button>
                     </form>
                   )}
+
+                  {/* DELIVERY PARTNER LOGIN (DELIVERY ID + PASSWORD) */}
+                  {roleTab === 'delivery' && (
+                    <form onSubmit={handleDeliveryLogin} className="space-y-4">
+                      <div className="bg-emerald-900/30 p-3 rounded-2xl border border-emerald-800 text-[11px] text-emerald-300 flex items-center gap-2">
+                        <Truck className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Delivery Partner access. Log in with the Rider ID issued by your seller / logistics admin. Demo: <strong className="text-amber-300">RIDER-001 / Rider123</strong>.</span>
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-300 font-bold mb-1">Delivery Partner ID</label>
+                        <div className="relative">
+                          <Bike className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                          <input
+                            type="text"
+                            required
+                            placeholder="RIDER-001"
+                            value={deliveryId}
+                            onChange={(e) => setDeliveryId(e.target.value)}
+                            className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono font-bold uppercase focus:ring-2 focus:ring-amber-400"
+                            data-testid="delivery-id-input"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-300 font-bold mb-1">Password</label>
+                        <div className="relative">
+                          <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                          <input
+                            type={showDeliveryPassword ? 'text' : 'password'}
+                            required
+                            placeholder="••••••••"
+                            value={deliveryPassword}
+                            onChange={(e) => setDeliveryPassword(e.target.value)}
+                            className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-10 py-2.5 text-white font-medium focus:ring-2 focus:ring-amber-400"
+                            data-testid="delivery-password-input"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowDeliveryPassword(!showDeliveryPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-amber-300 p-1 transition-colors"
+                          >
+                            {showDeliveryPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-black py-3 rounded-xl shadow-lg text-xs transition-all flex items-center justify-center gap-2"
+                        data-testid="delivery-login-submit"
+                      >
+                        <span>Delivery Partner Login</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </form>
+                  )}
                 </>
               )}
 
@@ -720,6 +826,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         Submit Vendor Registration
                       </button>
                     </form>
+                  )}
+
+                  {/* DELIVERY PARTNER — NO SELF REGISTRATION */}
+                  {roleTab === 'delivery' && (
+                    <div className="bg-emerald-900/40 border border-emerald-800 rounded-2xl p-5 text-center space-y-3">
+                      <Bike className="w-10 h-10 text-amber-400 mx-auto" />
+                      <h3 className="font-extrabold text-white text-sm">Delivery Partners are onboarded by Sellers</h3>
+                      <p className="text-[11px] text-emerald-300">
+                        Delivery Partner IDs (e.g. RIDER-001) are issued by the seller / logistics admin. Please switch to the
+                        <strong className="text-amber-300"> Login</strong> tab and sign in with your issued Rider ID.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('login')}
+                        className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-black px-4 py-2 rounded-xl text-xs"
+                      >
+                        Go to Delivery Login
+                      </button>
+                    </div>
                   )}
                 </>
               )}

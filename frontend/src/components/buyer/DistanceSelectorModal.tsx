@@ -22,6 +22,8 @@ export const DistanceSelectorModal: React.FC<DistanceSelectorModalProps> = ({
       ...prev,
       estimatedDistanceKm: km,
       pincode: pincode,
+      latitude: undefined,
+      longitude: undefined,
     }));
   };
 
@@ -168,7 +170,7 @@ export const DistanceSelectorModal: React.FC<DistanceSelectorModalProps> = ({
                 max="30"
                 step="0.5"
                 value={formData.estimatedDistanceKm}
-                onChange={(e) => setFormData({ ...formData, estimatedDistanceKm: parseFloat(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, estimatedDistanceKm: parseFloat(e.target.value), latitude: undefined, longitude: undefined })}
                 className="w-full accent-amber-400 cursor-pointer"
               />
             </div>

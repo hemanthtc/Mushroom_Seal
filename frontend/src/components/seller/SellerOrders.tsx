@@ -217,17 +217,37 @@ export const SellerOrders: React.FC<SellerOrdersProps> = ({
                         onClick={() => handleAdvanceStatus(order, 'Out for Delivery')}
                         className="w-full bg-amber-500 hover:bg-amber-400 text-emerald-950 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md"
                       >
-                        <Truck className="w-4 h-4" /> Dispatch Rider (Out for Delivery)
+                        <Truck className="w-4 h-4" /> Hand to Delivery (Publish Job)
                       </button>
                     )}
 
                     {order.status === 'Out for Delivery' && (
-                      <button
-                        onClick={() => handleAdvanceStatus(order, 'Delivered')}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md"
-                      >
-                        <CheckCircle className="w-4 h-4" /> Mark Delivered
-                      </button>
+                      <div className="space-y-1.5">
+                        {order.assignedAgentName ? (
+                          <div className="bg-emerald-900/60 border border-emerald-700 rounded-xl p-2.5 text-[11px] space-y-0.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-emerald-300 font-bold">Rider Assigned</span>
+                              <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-bold">
+                                {order.deliveryStage || 'Assigned'}
+                              </span>
+                            </div>
+                            <p className="text-white font-semibold">{order.assignedAgentName}</p>
+                            <p className="text-amber-400">{order.assignedAgentPhone}</p>
+                          </div>
+                        ) : (
+                          <div className="bg-amber-950/50 border border-amber-800/60 rounded-xl p-2 text-[11px] text-amber-200">
+                            Waiting for a delivery partner to accept this job — or mark delivered yourself.
+                          </div>
+                        )}
+                        {!order.assignedAgentId && (
+                          <button
+                            onClick={() => handleAdvanceStatus(order, 'Delivered')}
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md"
+                          >
+                            <CheckCircle className="w-4 h-4" /> Mark Delivered (Self-Delivery)
+                          </button>
+                        )}
+                      </div>
                     )}
 
                     {/* Return Request Approval / Rejection */}

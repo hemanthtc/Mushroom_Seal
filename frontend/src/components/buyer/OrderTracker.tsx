@@ -19,8 +19,13 @@ import {
   ChevronDown,
   ChevronUp,
   X,
-  ArrowLeft
+  ArrowLeft,
+  Bike,
+  QrCode,
+  KeyRound,
+  Truck
 } from 'lucide-react';
+import { QRCode } from '../common/QRCode';
 
 interface OrderTrackerProps {
   orders: Order[];
@@ -354,6 +359,85 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* LIVE DELIVERY TRACKING & SECURE HANDOVER (QR + OTP) */}
+              {selectedOrder.status === 'Out for Delivery' && selectedOrder.deliveryOtp && (
+                <div className="bg-emerald-950/80 p-4 rounded-2xl border border-amber-700/50 space-y-4" data-testid="delivery-handover-card">
+                  <h4 className="text-xs font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Truck className="w-4 h-4" /> Live Delivery Tracking
+                  </h4>
+
+                  {/* Delivery stage tracker */}
+                  <div className="grid grid-cols-4 gap-1.5 text-center">
+                    {(['Assigned', 'Picked Up', 'Arrived', 'Delivered'] as const).map((stage) => {
+                      const order = ['Assigned', 'Picked Up', 'Arrived', 'Delivered'];
+                      const currentIdx = order.indexOf(selectedOrder.deliveryStage || 'Unassigned');
+                      const thisIdx = order.indexOf(stage);
+                      const done = currentIdx >= thisIdx && currentIdx >= 0;
+                      return (
+                        <div
+                          key={stage}
+                          className={`p-1.5 rounded-lg border text-[10px] font-bold ${
+                            done ? 'bg-amber-500 text-emerald-950 border-amber-400' : 'bg-emerald-950/60 text-emerald-500 border-emerald-900'
+                          }`}
+                        >
+                          {stage}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Assigned rider info */}
+                  {selectedOrder.assignedAgentName ? (
+                    <div className="bg-emerald-900/50 border border-emerald-700 rounded-xl p-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-amber-500 text-emerald-950 flex items-center justify-center shrink-0">
+                        <Bike className="w-5 h-5" />
+                      </div>
+                      <div className="text-xs">
+                        <p className="text-white font-bold">{selectedOrder.assignedAgentName}</p>
+                        <p className="text-amber-400 flex items-center gap-1">
+                          <Phone className="w-3 h-3" /> {selectedOrder.assignedAgentPhone}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-amber-950/50 border border-amber-800/60 rounded-xl p-2.5 text-[11px] text-amber-200">
+                      Your order is dispatched and waiting for a delivery partner to accept. You'll see rider details here shortly.
+                    </div>
+                  )}
+
+                  {/* Secure QR + OTP customer shows on handover */}
+                  <div className="bg-emerald-900/40 border border-emerald-700 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4">
+                    <QRCode
+                      value={JSON.stringify({
+                        orderId: selectedOrder.id,
+                        otp: selectedOrder.deliveryOtp,
+                        amount: selectedOrder.grandTotal,
+                        cod: selectedOrder.paymentMethod === 'COD',
+                      })}
+                      size={132}
+                    />
+                    <div className="text-center sm:text-left space-y-1.5">
+                      <p className="text-[11px] text-emerald-300 flex items-center gap-1 justify-center sm:justify-start">
+                        <QrCode className="w-3.5 h-3.5 text-amber-400" /> Show this to your delivery partner
+                      </p>
+                      <div className="bg-emerald-950 border border-amber-500/40 rounded-xl px-4 py-2 inline-block">
+                        <span className="text-[10px] text-emerald-400 flex items-center gap-1 justify-center">
+                          <KeyRound className="w-3 h-3 text-amber-400" /> Delivery OTP
+                        </span>
+                        <span className="font-mono font-black text-2xl text-amber-300 tracking-[0.3em]" data-testid="customer-delivery-otp">
+                          {selectedOrder.deliveryOtp}
+                        </span>
+                      </div>
+                      {selectedOrder.paymentMethod === 'COD' && (
+                        <p className="text-[11px] text-amber-200 flex items-center gap-1 justify-center sm:justify-start">
+                          <Banknote className="w-3.5 h-3.5 text-amber-400" /> Pay <strong className="text-white">₹{selectedOrder.grandTotal}</strong> in cash/UPI — the same code confirms payment.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* ITEMS ORDERED WITH COLLAPSE / EXPAND FEATURE */}
               <div className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-800/80 space-y-3">

@@ -1,0 +1,63 @@
+{
+  "summary": "End-to-end frontend test of Shroom & Veggies (Vite + React, localStorage-only, no backend). Verified all 3 role flows in a single browser session: guest landing, seller login + add product, customer OTP login + COD checkout, seller fulfillment (Start Packing -> Hand to Delivery), delivery-partner login (RIDER-001) + Accept -> Picked Up -> Arrived -> Verify. OTP handover verified: wrong OTP is rejected with error and the correct OTP (captured from the customer's Live Delivery Tracking card, data-testid=customer-delivery-otp) marks the order Delivered & COD collected in delivery History. All primary requirements PASS except that the customer-side Location/Address Selector modal is unreachable from the UI (no button wires setIsDistanceModalOpen(true)).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Header (customer mode) / DistanceSelectorModal wiring in App.tsx",
+        "issue": "The customer Location/Address Selector modal (DistanceSelectorModal) can never be opened from the UI. `setIsDistanceModalOpen` is defined in App.tsx but is NEVER called (grep shows only the setter declaration and the modal's onClose). The header 'Location: <pincode> (x km)' pill is a plain <div>, not a button, so the manual address form + Google Maps picker (Locate Me / search / iframe) are effectively unreachable. This directly fails the requested test: 'verify the location/address selector modal opens ...'.",
+        "selector": "header (customer) Location pill; no trigger exists in App.tsx",
+        "priority": "HIGH"
+      },
+      {
+        "component": "App.tsx addToast",
+        "issue": "React warning 'Encountered two children with the same key' fires repeatedly during rapid status updates (seen ~20 times when delivery statuses advance). Root cause: toast id is generated via `Date.now().toString()`, so toasts added in the same millisecond collide. Use crypto.randomUUID() or a monotonic counter.",
+        "selector": "App.tsx line 107-113",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "Global (index.html)",
+        "issue": "Console warning: 'cdn.tailwindcss.com should not be used in production'. Tailwind is loaded via CDN; the app should use the PostCSS plugin / Tailwind CLI as configured in postcss.config.js / tailwind.config.js.",
+        "selector": "index.html <script src=cdn.tailwindcss.com>",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Delivery History (post-delivery)",
+        "issues": [
+          "Toast stack fires ~20 'Order ORD-XXXX status updated.' toasts almost simultaneously and covers the top-right corner (also hides the guest-delivery-login-btn / Available-Jobs area). Debounce or dedupe status-change toasts, or show a single 'Delivered & verified' toast."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/final_state.png",
+    "/app/test_reports/location_modal.png",
+    "/app/test_reports/customer_home.png"
+  ],
+  "action_items": [
+    "Wire up DistanceSelectorModal: make the customer Header 'Location: ... (x km)' pill a <button> whose onClick calls setIsDistanceModalOpen(true); also expose it from checkout / profile for redundancy. Add data-testid='open-location-picker' for testability.",
+    "Fix duplicate React key in App.tsx addToast: replace `Date.now().toString()` with `crypto.randomUUID()` (or `${Date.now()}-${Math.random()}`).",
+    "Debounce/consolidate the flurry of 'Order ORD-XX status updated.' toasts fired during delivery-stage transitions; show one final toast per user action.",
+    "Add data-testids to key seller/buyer controls (Login button, Logout icon-only buttons in customer/seller header, Products tab, Orders & Refunds tab, Start Packing, Hand to Delivery, Cart Add buttons, Confirm Order (COD), My Orders order-card) — currently only delivery flow has robust testids. This will make future regression tests significantly more stable.",
+    "Move Tailwind off the CDN (production warning)."
+  ],
+  "critical_code_review_comments": [
+    "App.tsx: `setIsDistanceModalOpen` state setter is declared but never invoked; dead code / broken feature. Add a trigger from Header or Profile.",
+    "App.tsx (addToast): `Date.now()` toast ids collide when multiple state updates fire in the same tick — replace with UUID/counter.",
+    "App.tsx exceeds 660 lines — consider splitting router / role-specific views into separate files."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "91% (11/12 required checks pass)"},
+  "seed_data_creation": "Created one seller product 'TEST_Oyster_Mushroom' (₹199, stock 50) under the default seller session, and one COD order (ORD-*) placed by the default customer session. Order was progressed to Delivered & Verified.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Seller ramesh.patel@shroomvalley.org / Seller123; Customer phone +91 98450 12345 with auto-prefilled OTP; Delivery RIDER-001 / Rider123 (as documented in /app/memory/test_credentials.md).",
+  "context_for_next_testing_agent": "Full happy path (seller add-product -> customer COD order -> seller publish -> delivery accept/pickup/arrive/verify) is functionally working end-to-end in one browser session. The only functional gap is the unreachable Location Picker (see action_items). After the main agent wires setIsDistanceModalOpen(true) to a header/profile button, re-test by: (1) log in as customer, (2) click new location button in header, (3) verify DistanceSelectorModal opens with manual address form + 'Open Google Maps Precise Location Picker' launcher, (4) launch map picker and confirm iframe + 'Locate Me' + search render, (5) Save Address and confirm the header pill updates. Selectors used in tests: header Login = header button:has-text('Login'); role tabs by role button name 'Seller / Vendor' / 'Customer' / auth-role-delivery; logout icon = button[title*='Log Out']; product Add = catalog card button:has-text('Add'); Cart nav = header button:has-text('Cart'); Confirm COD = button:has-text('Confirm Order (COD)'); OTP capture = [data-testid=customer-delivery-otp].",
+  "rca_of_the_issue": "DistanceSelectorModal is imported and rendered conditionally in App.tsx (line 573), but the state setter setIsDistanceModalOpen(true) is not called anywhere in the codebase (verified via `grep -rn setIsDistanceModalOpen /app/frontend/src`). The header's Location pill (Header.tsx L112-121) is a static <div>. Result: the modal + map picker are dead code from a user's perspective. Fix by adding an onClick to convert the pill into a button (or add a separate 'Change Location' button) that calls the setter passed down as a prop, and expose data-testid='open-location-picker' for tests."
+}
