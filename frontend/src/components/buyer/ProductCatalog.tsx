@@ -39,15 +39,20 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
 }) => {
   const [selectedProductDetail, setSelectedProductDetail] = useState<Product | null>(null);
   const [addedAnimationId, setAddedAnimationId] = useState<string | null>(null);
+  const [selectedShop, setSelectedShop] = useState<string>('All Shops');
+
+  const shops = ['All Shops', ...Array.from(new Set(products.map((p) => p.sellerName || p.farmName).filter(Boolean)))];
 
   // Filter logic
   const filteredProducts = products.filter((p) => {
+    const shopName = p.sellerName || p.farmName;
+    const matchesShop = selectedShop === 'All Shops' || shopName === selectedShop;
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
     const matchesSearch = searchQuery === '' || 
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
       p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.farmName.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    return matchesShop && matchesCategory && matchesSearch;
   });
 
   const handleQuickAdd = (product: Product, e: React.MouseEvent) => {
@@ -91,6 +96,27 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Shop / Seller Filter */}
+      {shops.length > 2 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" data-testid="shop-filter">
+          <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider shrink-0 mr-1">Shops:</span>
+          {shops.map((shop) => (
+            <button
+              key={shop}
+              onClick={() => setSelectedShop(shop)}
+              className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all border ${
+                selectedShop === shop
+                  ? 'bg-amber-500 text-emerald-950 border-amber-400'
+                  : 'bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 border-emerald-800/50'
+              }`}
+              data-testid={`shop-pill-${shop}`}
+            >
+              {shop}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Category Pills */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">

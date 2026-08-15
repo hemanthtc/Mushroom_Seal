@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { Order, DeliveryAgent, TabType } from '../../types';
+import { postRiderLocation } from '../../services/api';
 import {
   Bike,
   Package,
@@ -18,6 +19,7 @@ import {
   KeyRound,
   IndianRupee,
   ScanLine,
+  Radio,
 } from 'lucide-react';
 
 interface DeliveryPortalProps {
@@ -38,6 +40,34 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
   const [verifyingOrder, setVerifyingOrder] = useState<Order | null>(null);
   const [otpInput, setOtpInput] = useState('');
   const [otpError, setOtpError] = useState('');
+  const [sharing, setSharing] = useState<Record<string, number>>({});
+
+  const toggleShareLocation = (order: Order) => {
+    if (!('geolocation' in navigator)) {
+      addToast('warning', 'Geolocation is not supported on this device.');
+      return;
+    }
+    const existing = sharing[order.id];
+    if (existing !== undefined) {
+      navigator.geolocation.clearWatch(existing);
+      setSharing((prev) => {
+        const next = { ...prev };
+        delete next[order.id];
+        return next;
+      });
+      addToast('info', `Stopped sharing live location for ${order.id}.`);
+      return;
+    }
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        postRiderLocation(order.id, pos.coords.latitude, pos.coords.longitude).catch(() => {});
+      },
+      () => addToast('warning', 'Could not access your location. Please allow GPS permission.'),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    );
+    setSharing((prev) => ({ ...prev, [order.id]: watchId }));
+    addToast('success', `Sharing live location for ${order.id}. The customer can now track you.`);
+  };
 
   // Available jobs: dispatched by seller, not yet accepted by any rider
   const availableJobs = orders.filter(
@@ -320,6 +350,20 @@ export const DeliveryPortal: React.FC<DeliveryPortalProps> = ({
                     </button>
                   )}
                 </div>
+                {order.deliveryStage !== 'Delivered' && (
+                  <button
+                    onClick={() => toggleShareLocation(order)}
+                    className={`w-full font-bold py-2 rounded-2xl text-xs flex items-center justify-center gap-1.5 border transition-all ${
+                      sharing[order.id] !== undefined
+                        ? 'bg-emerald-500 text-emerald-950 border-emerald-400 animate-pulse'
+                        : 'bg-emerald-900/60 text-emerald-200 border-emerald-700 hover:border-amber-400'
+                    }`}
+                    data-testid={`share-location-${order.id}`}
+                  >
+                    <Radio className="w-4 h-4" />
+                    {sharing[order.id] !== undefined ? 'Sharing Live Location — Tap to Stop' : 'Share Live Location with Customer'}
+                  </button>
+                )}
                 {order.paymentMethod === 'COD' && (
                   <div className="bg-amber-950/50 border border-amber-800/60 rounded-2xl p-3 text-[11px] text-amber-200 flex items-center gap-2">
                     <IndianRupee className="w-4 h-4 text-amber-400 shrink-0" />

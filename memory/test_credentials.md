@@ -1,23 +1,31 @@
-# Test Credentials — Shroom & Veggies (client-side, localStorage)
+# Test Credentials — Shroom & Veggies (now CLOUD-SYNCED)
 
-App type: Vite + React 19 + TS. 100% client-side (no backend). Data persists in browser localStorage/sessionStorage. All three roles can be exercised in a single browser session (orders are stored globally and visible to seller + delivery).
+Architecture: Vite + React 19 + TS frontend (served on :3000 via supervisor `frontend`) + **FastAPI + MongoDB backend** (`/app/backend/server.py`, supervisor `backend` on :8001). Frontend calls the backend at the **relative `/api`** path (same preview origin via ingress). Auth is **JWT Bearer** stored in `localStorage` (`sv_auth_token`, `sv_auth_role`).
 
-## Customer (Mobile OTP login)
-- Phone: any (default prefilled `+91 98450 12345`)
-- OTP: a simulated 6-digit code is shown on screen after "Send OTP"; the field is auto-prefilled. Master OTP `123456` also works.
+## Seller (email + password) — SEEDED
+- Email: `ramesh.patel@shroomvalley.org`
+- Password: `Seller123`
+- New sellers can self-register (creates a real account + logs in).
 
-## Seller (Email + Password login)
-- Email: any non-"pending" email (default `ramesh.patel@shroomvalley.org`)
-- Password: any (default `Seller123`)
-- Note: emails containing "pending" are rejected (simulated approval gate).
+## Customer (mobile OTP)
+- Phone: any (e.g. `+91 98450 12345`)
+- OTP: `POST /api/auth/customer/send-otp` returns the code (SMS simulated); the UI auto-prefills it. Master OTP `123456` also works.
 
-## Delivery Partner (Rider ID + Password login)
-- Rider ID: `RIDER-001` (also `RIDER-002`)
-- Password: `Rider123` (any password accepted in demo)
-- Unknown IDs are accepted as ad-hoc demo riders.
+## Delivery Partner (Rider ID + password)
+- Seeded rider: `RIDER-001` / `Rider123` (tied to the demo seller).
+- Sellers create their own riders in Seller → "Delivery Riders"; a new `RIDER-XXXX` id + the chosen password are shown once.
+
+## Backend endpoints (prefix /api)
+- Auth: /auth/seller/register, /auth/seller/login, /auth/customer/send-otp, /auth/customer/verify-otp, /auth/rider/login, /auth/me
+- Sellers: GET /sellers
+- Products: GET /products[?sellerId], POST/PUT/DELETE /products (seller Bearer)
+- Orders: GET /orders (role-based), POST /orders (customer), PUT /orders/{id}, POST /orders/{id}/location (rider)
+- Riders: GET/POST /riders (seller), DELETE /riders/{id}
 
 ## Key data-testids
 - guest-delivery-login-btn, auth-role-delivery, delivery-id-input, delivery-password-input, delivery-login-submit
-- nav-delivery-active, nav-delivery-jobs, nav-delivery-history, delivery-logout-btn
-- accept-job-{orderId}, pickup-{orderId}, arrived-{orderId}, verify-{orderId}, delivery-otp-input, confirm-delivery-btn, navigate-{orderId}
-- customer-delivery-otp, delivery-handover-card, qr-image
+- open-location-picker, open-location-picker-top
+- nav-seller-riders, add-rider-btn, rider-name-input, rider-password-input, save-rider-btn, rider-credentials, rider-card-{agentId}
+- shop-filter, shop-pill-{name}
+- nav-delivery-active, nav-delivery-jobs, nav-delivery-history, accept-job-{id}, pickup-{id}, arrived-{id}, verify-{id}, share-location-{id}, delivery-otp-input, confirm-delivery-btn
+- customer-delivery-otp, live-rider-map, delivery-handover-card

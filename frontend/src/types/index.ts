@@ -15,6 +15,7 @@ export type TabType =
   | 'fulfillment' 
   | 'policy' 
   | 'profile'
+  | 'riders'
   | 'delivery'
   | 'delivery-jobs'
   | 'delivery-history';
@@ -34,6 +35,9 @@ export interface DeliveryAgent {
   vehicleNumber: string;
   rating: number;
   zone: string;
+  id?: string;
+  sellerId?: string;
+  sellerName?: string;
 }
 
 export interface DistanceRules {
@@ -56,6 +60,10 @@ export interface Product {
   harvestedDate: string;
   distanceRules: DistanceRules;
   badge?: string;
+  sellerId?: string;
+  sellerName?: string;
+  sellerLat?: number;
+  sellerLng?: number;
 }
 
 export interface CartItem {
@@ -124,6 +132,24 @@ export interface Order {
   assignedAgentPhone?: string;
   codCollected?: boolean;
   sellerId?: string;
+  sellerName?: string;
+  customerId?: string;
+  customerPhone?: string;
+  riderLat?: number;
+  riderLng?: number;
+  riderLocAt?: string;
+}
+
+export interface SellerDirectoryEntry {
+  id: string;
+  sellerId: string;
+  farmName: string;
+  ownerName: string;
+  farmAddress: string;
+  latitude: number;
+  longitude: number;
+  rating: number;
+  organicCertNo?: string;
 }
 
 export interface UserProfile {

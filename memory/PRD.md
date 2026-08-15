@@ -1,38 +1,39 @@
-# Shroom & Veggies — Multi-Role Farm E-commerce (PRD)
+# Shroom & Veggies — Multi-Role Farm Marketplace (PRD)
 
 ## Original problem statement (paraphrased)
-Single-seller mushroom e-commerce (expandable to more products & more sellers) that needs a full restructure:
-- Redesigned Customer interface: catalog, cart, ordering, proper location selection.
-- Seller interface: portfolio/profile, product management, order tracking (accepted/completed).
-- NEW Delivery Partner interface: assigned-order tracking + OTP/QR handover verification.
-- COD: customer shows a QR/OTP to confirm payment on delivery.
-- Logins: mobile-number OTP for customers, email+password for sellers, delivery-ID for delivery partners.
+Single-seller mushroom shop (expandable to more products & sellers) needing a full restructure with redesigned Customer, Seller, and Delivery interfaces; proper location selection; OTP/QR delivery handover; COD confirmation. Follow-up ask: make it a real multi-seller marketplace, add a live rider map, move to a real database (cloud sync), and let sellers onboard their own riders.
 
-## Architecture
-- **Stack:** Vite + React 19 + TypeScript. 100% client-side; data persists in browser localStorage/sessionStorage. No backend service is used (an unused Express/Mongoose folder remains at /app/server).
-- **Runtime:** App relocated to `/app/frontend`, served by Vite on port 3000 via supervisor `frontend` (`yarn start`). Preview ingress routes non-/api traffic to :3000.
-- Location uses free OpenStreetMap/Nominatim geocoding + Google Maps iframe embed (no API key). QR via `qrcode` npm package.
+## Architecture (current)
+- **Frontend:** Vite + React 19 + TypeScript, served on :3000 via supervisor `frontend`. Calls backend at relative `/api` (same preview origin via ingress).
+- **Backend:** FastAPI + MongoDB (Motor), supervisor `backend` on :8001. JWT **Bearer** auth (token in localStorage `sv_auth_token`). bcrypt password hashing. `/app/backend/server.py`.
+- **Client cache:** `services/storage.ts` keeps only cart, active address, and pure helpers (distance/limit). All accounts/products/orders live in MongoDB.
+- Location & maps: keyless (Google Maps iframe embed + OpenStreetMap/Nominatim). QR via `qrcode` npm.
 
-## Roles & sessions
-- Customer: phone OTP login, 7-day localStorage session.
-- Seller: email+password, tab (sessionStorage) session.
-- Delivery Partner: Rider ID + password, tab session. Default riders RIDER-001 (Arjun Kumar), RIDER-002 (Priya Nair).
+## Roles
+- Customer: phone OTP login (SMS simulated — send-otp returns code).
+- Seller: email + password (self-register creates real account). Seeded demo: ramesh.patel@shroomvalley.org / Seller123.
+- Delivery rider: Rider ID + password, created by a seller. Seeded: RIDER-001 / Rider123.
 
-## Implemented (2026-06)
-- Relocated + configured app to run in preview (Vite :3000).
-- **Delivery Partner interface** (`components/delivery/DeliveryPortal.tsx`): Available Jobs / Active / History, stat cards, stage machine Assigned→Picked Up→Arrived→Delivered, map navigation link, COD collect prompt.
-- **OTP/QR handover verification:** every order gets a 6-digit `deliveryOtp` at checkout; customer sees it + a QR (encodes orderId/otp/amount/cod) on the Live Delivery Tracking card once Out for Delivery; delivery partner enters the OTP to complete (wrong OTP rejected). For COD, the same code confirms payment collected.
-- **Seller→Delivery flow:** seller "Hand to Delivery (Publish Job)" publishes the order to riders; seller sees assigned rider + stage, or can self-deliver.
-- **Auth:** added Delivery role tab + form to AuthModal; guest header "Delivery Partner" entry.
-- **Location fix (was unreachable):** header location pill is now a button opening the DistanceSelectorModal (manual form + Zone presets + custom distance slider + Google Maps precise picker with GPS/search). Manual distance now respected (no override by stale coords). Map modal actions moved to a sticky footer.
-- Fixed toast id key collision and duplicate status toasts.
-- **Verified by testing agent:** full loop (seller add product → customer COD order → publish → rider accept/pickup/arrive/OTP verify → delivered) and location picker — all passing.
+## Implemented
+### Phase 1 (client-side, 2026-06)
+- 3 interfaces, delivery portal with stage machine + OTP/QR handover, COD confirmation, seller→delivery publish, reachable location picker (manual + Google Maps precise pin).
+
+### Phase 2 — Backend migration + 4 features (2026-06)
+- **Cloud Sync:** full FastAPI + MongoDB backend; JWT sessions persist across reloads/devices. 23/23 backend pytest passing.
+- **Multi-Seller Catalogs:** products carry sellerId/sellerName/sellerLat/lng; storefront shows all sellers with a "Shops" filter; each seller sees only their own products/orders. Cross-seller carts split into one order per seller at checkout.
+- **Rider Onboarding:** Seller "Delivery Riders" tab (RiderManager) to create/list/delete riders; new RIDER-XXXX id + password shown once; rider logs in and sees that seller's jobs.
+- **Live Rider Map:** rider "Share Live Location" (navigator.geolocation → POST /orders/{id}/location); customer OrderTracker shows a live Google Maps iframe (data-testid live-rider-map) that refreshes via 7s order polling.
+- **Hardening:** backend normalizes product `distanceRules` and order `address`; frontend guards against partial data (no white-screen crashes).
+
+## Verified
+- Backend: 23/23 pytest (`/app/backend/tests/backend_test.py`).
+- Frontend E2E: multi-seller shop filter, cross-seller cards, JWT persistence on reload, rider onboarding + new-rider login, live rider map, full delivery OTP loop, location picker. (iteration_3 report; defensive crashes fixed post-report.)
 
 ## Backlog / next
-- P1: True multi-seller — per-seller catalogs, seller onboarding of their own riders, seller-scoped order/analytics (currently seller registration exists as pending-approval simulation; catalog is shared).
-- P1: Delivery — live GPS map trail (currently status + navigate link + insulated cold-box stage tracking).
-- P2: Move Tailwind off CDN to PostCSS build.
-- P2: Persist data to a real backend (FastAPI/Mongo) if multi-device sync is needed.
+- P1: Seller-scoped analytics & payouts; seller can assign a specific rider to an order (currently riders self-accept from their seller's job pool).
+- P2: Real SMS (Twilio) & real payments (go-live) — currently simulated.
+- P2: WebSocket push instead of 7s polling; battery-friendly rider tracking.
+- P2: Move Tailwind from CDN to PostCSS build (LOW console warning).
 
 ## Notes / MOCKED
-- Payments (Razorpay) and SMS OTP are SIMULATED. Geocoding is live (OSM/Google embed, keyless). All data is browser-local (no server persistence / no cross-device sync).
+- Payments (Razorpay) and SMS OTP are SIMULATED (send-otp returns the code). Maps are keyless embeds. Everything else is persisted in MongoDB.

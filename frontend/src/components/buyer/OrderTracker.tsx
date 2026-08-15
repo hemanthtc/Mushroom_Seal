@@ -406,6 +406,29 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
                     </div>
                   )}
 
+                  {/* Live rider map */}
+                  {selectedOrder.riderLat && selectedOrder.riderLng ? (
+                    <div className="rounded-2xl overflow-hidden border border-emerald-700 relative" data-testid="live-rider-map">
+                      <div className="absolute top-2 left-2 z-10 bg-emerald-950/90 text-emerald-200 text-[10px] font-bold px-2 py-1 rounded-full border border-emerald-700 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> LIVE rider location
+                      </div>
+                      <iframe
+                        title="Live rider location"
+                        width="100%"
+                        height="180"
+                        style={{ border: 0 }}
+                        loading="lazy"
+                        src={`https://maps.google.com/maps?q=${selectedOrder.riderLat},${selectedOrder.riderLng}&z=15&output=embed`}
+                      />
+                    </div>
+                  ) : (
+                    selectedOrder.assignedAgentName && (
+                      <div className="bg-emerald-900/30 border border-emerald-800 rounded-2xl p-2.5 text-[11px] text-emerald-300 flex items-center gap-2">
+                        <Truck className="w-3.5 h-3.5 text-amber-400" /> Waiting for the rider to start sharing their live location…
+                      </div>
+                    )
+                  )}
+
                   {/* Secure QR + OTP customer shows on handover */}
                   <div className="bg-emerald-900/40 border border-emerald-700 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4">
                     <QRCode
@@ -498,10 +521,10 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
                     )}
                   </div>
                   
-                  <p className="text-white font-bold">{selectedOrder.address.fullName}</p>
-                  <p className="text-emerald-200">{selectedOrder.address.streetAddress}, {selectedOrder.address.city} - {selectedOrder.address.pincode}</p>
+                  <p className="text-white font-bold">{selectedOrder.address?.fullName || '—'}</p>
+                  <p className="text-emerald-200">{selectedOrder.address?.streetAddress}, {selectedOrder.address?.city} - {selectedOrder.address?.pincode}</p>
                   <p className="text-emerald-300 font-semibold flex items-center gap-1">
-                    <Phone className="w-3 h-3 text-amber-400" /> {selectedOrder.address.phone}
+                    <Phone className="w-3 h-3 text-amber-400" /> {selectedOrder.address?.phone || '—'}
                   </p>
                   
                   {!canEditDetails && selectedOrder.status !== 'Cancelled' && (

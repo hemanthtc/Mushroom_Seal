@@ -1,41 +1,41 @@
-import { useState, useEffect } from 'react';
-import type { 
-  Product, 
-  Order, 
-  CartItem, 
-  AddressDetails, 
-  CategoryType, 
+import { useState, useEffect, useRef } from 'react';
+import type {
+  Product,
+  Order,
+  CartItem,
+  AddressDetails,
+  CategoryType,
   ToastMessage,
   UserProfile,
   SellerProfile,
   DeliveryAgent,
-  TabType
+  TabType,
 } from './types';
-import { 
-  initializeStorage, 
-  getProducts, 
-  addProduct, 
-  updateProduct, 
-  deleteProduct,
-  getOrders, 
-  createOrder, 
-  updateOrder, 
-  getCart, 
-  saveCart, 
-  getUserAddress, 
-  saveUserAddress, 
-  getUserProfile,
+import {
+  getProducts as apiGetProducts,
+  createProduct as apiCreateProduct,
+  updateProductApi,
+  deleteProductApi,
+  getOrders as apiGetOrders,
+  createOrder as apiCreateOrder,
+  updateOrderApi,
+  updateCustomerProfile,
+  getMe,
+  getToken,
+  clearAuth,
+} from './services/api';
+import {
+  getCart,
+  saveCart,
+  getUserAddress,
+  saveUserAddress,
   saveUserProfile,
-  getSellerProfile,
   saveSellerProfile,
   getMaxAllowedQuantityForDistance,
-  saveCustomerSession,
-  getCustomerSession,
-  saveSellerSession,
-  getSellerSession,
-  saveDeliverySession,
-  getDeliverySession,
-  clearAllSessions
+  calculateKmDistance,
+  DEFAULT_ADDRESS,
+  DEFAULT_USER_PROFILE,
+  DEFAULT_SELLER_PROFILE,
 } from './services/storage';
 
 import { Header } from './components/Header';
@@ -56,6 +56,7 @@ import { ProductManagerModal } from './components/seller/ProductManagerModal';
 import { SellerOrders } from './components/seller/SellerOrders';
 import { DistancePolicyConfig } from './components/seller/DistancePolicyConfig';
 import { SellerAccountModal } from './components/seller/SellerAccountModal';
+import { RiderManager } from './components/seller/RiderManager';
 
 import { DeliveryPortal } from './components/delivery/DeliveryPortal';
 
@@ -72,27 +73,23 @@ const CATEGORIES: CategoryType[] = [
 ];
 
 export function App() {
-  // Authentication & Session State
   const [authMode, setAuthMode] = useState<'guest' | 'customer' | 'seller' | 'delivery'>('guest');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
   const [authModalRole, setAuthModalRole] = useState<'customer' | 'seller' | 'delivery'>('customer');
   const [deliveryAgent, setDeliveryAgent] = useState<DeliveryAgent | null>(null);
 
-  // Active navigation tab
   const [activeTab, setActiveTab] = useState<TabType>('store');
-  
-  // App Data
+
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [address, setAddress] = useState<AddressDetails>(getUserAddress());
-  const [userProfile, setUserProfile] = useState<UserProfile>(getUserProfile());
-  const [sellerProfile, setSellerProfile] = useState<SellerProfile>(getSellerProfile());
+  const [address, setAddress] = useState<AddressDetails>(DEFAULT_ADDRESS);
+  const [userProfile, setUserProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
+  const [sellerProfile, setSellerProfile] = useState<SellerProfile>(DEFAULT_SELLER_PROFILE);
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Modals
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isDistanceModalOpen, setIsDistanceModalOpen] = useState(false);
@@ -101,262 +98,321 @@ export function App() {
   const [isBuyerAccountOpen, setIsBuyerAccountOpen] = useState(false);
   const [isSellerAccountOpen, setIsSellerAccountOpen] = useState(false);
 
-  // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const authModeRef = useRef(authMode);
+  authModeRef.current = authMode;
 
   const addToast = (type: ToastMessage['type'], text: string) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setToasts((prev) => [...prev, { id, type, text }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
   };
 
-  // Load initial data and restore sessions
+  // ---- data loaders ----
+  const refreshOrders = async () => {
+    try {
+      setOrders(await apiGetOrders());
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const loadStorefront = async () => {
+    try {
+      setProducts(await apiGetProducts());
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const loadSellerProducts = async (sellerDbId: string) => {
+    try {
+      setProducts(await apiGetProducts(sellerDbId));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // ---- initial session restore ----
   useEffect(() => {
-    initializeStorage();
-    setProducts(getProducts());
-
-    // 1. Check Seller Session (sessionStorage - cleared on tab close)
-    const activeSeller = getSellerSession();
-    if (activeSeller) {
-      setSellerProfile(activeSeller);
-      setAuthMode('seller');
-      setActiveTab('dashboard');
-      setOrders(getOrders());
-      return;
-    }
-
-    // 1b. Check Delivery Session (sessionStorage)
-    const activeDelivery = getDeliverySession();
-    if (activeDelivery) {
-      setDeliveryAgent(activeDelivery);
-      setAuthMode('delivery');
-      setActiveTab('delivery');
-      setOrders(getOrders());
-      return;
-    }
-
-    // 2. Check Customer Session (localStorage - 7 day expiration)
-    const activeCustomer = getCustomerSession();
-    if (activeCustomer) {
-      setUserProfile(activeCustomer);
-      setAuthMode('customer');
-      setActiveTab('store');
-      setCart(getCart(activeCustomer.phone));
-      setAddress(getUserAddress(activeCustomer.phone));
-      setOrders(getOrders(activeCustomer.phone));
-      return;
-    }
-
-    // 3. Fallback to Guest Promotional View
-    setAuthMode('guest');
-    setOrders([]);
-    setCart([]);
+    (async () => {
+      const token = getToken();
+      if (token) {
+        try {
+          const me = await getMe();
+          if (me.role === 'seller') {
+            setSellerProfile(me.profile);
+            saveSellerProfile(me.profile);
+            setAuthMode('seller');
+            setActiveTab('dashboard');
+            await loadSellerProducts(me.profile.id);
+            await refreshOrders();
+            return;
+          }
+          if (me.role === 'customer') {
+            setUserProfile(me.profile);
+            saveUserProfile(me.profile);
+            setAuthMode('customer');
+            setActiveTab('store');
+            setCart(getCart(me.profile.phone));
+            setAddress(getUserAddress(me.profile.phone));
+            await loadStorefront();
+            await refreshOrders();
+            return;
+          }
+          if (me.role === 'rider') {
+            setDeliveryAgent(me.profile);
+            setAuthMode('delivery');
+            setActiveTab('delivery');
+            await refreshOrders();
+            return;
+          }
+        } catch {
+          clearAuth();
+        }
+      }
+      await loadStorefront();
+    })();
   }, []);
 
-  // --- AUTHENTICATION HANDLERS ---
+  // ---- live polling of orders (status + rider location sync) ----
+  useEffect(() => {
+    if (authMode === 'guest') return;
+    const interval = setInterval(() => {
+      refreshOrders();
+    }, 7000);
+    return () => clearInterval(interval);
+  }, [authMode]);
+
+  // ---- auth handlers ----
   const handleOpenLogin = (role: 'customer' | 'seller' | 'delivery' = 'customer') => {
     setAuthModalTab('login');
     setAuthModalRole(role);
     setIsAuthModalOpen(true);
   };
-
   const handleOpenRegister = (role: 'customer' | 'seller' = 'customer') => {
     setAuthModalTab('register');
     setAuthModalRole(role);
     setIsAuthModalOpen(true);
   };
 
-  const handleCustomerLoginSuccess = (profile: UserProfile) => {
-    saveCustomerSession(profile);
+  const handleCustomerLoginSuccess = async (profile: UserProfile) => {
+    saveUserProfile(profile);
     setUserProfile(profile);
     setAuthMode('customer');
     setActiveTab('store');
     setCart(getCart(profile.phone));
     setAddress(getUserAddress(profile.phone));
-    setOrders(getOrders(profile.phone));
-    addToast('success', `Welcome back, ${profile.name}! 7-Day Customer Session Active.`);
+    await loadStorefront();
+    await refreshOrders();
+    addToast('success', `Welcome, ${profile.name || 'friend'}! You're signed in.`);
   };
 
-  const handleSellerLoginSuccess = (profile: SellerProfile) => {
-    saveSellerSession(profile);
+  const handleSellerLoginSuccess = async (profile: SellerProfile) => {
+    saveSellerProfile(profile);
     setSellerProfile(profile);
     setAuthMode('seller');
     setActiveTab('dashboard');
-    setOrders(getOrders());
-    addToast('success', `Seller Authenticated! Active session bound to current browser tab.`);
+    await loadSellerProducts((profile as any).id);
+    await refreshOrders();
+    addToast('success', `Seller signed in — ${profile.farmName}.`);
   };
 
-  const handleDeliveryLoginSuccess = (agent: DeliveryAgent) => {
-    saveDeliverySession(agent);
+  const handleDeliveryLoginSuccess = async (agent: DeliveryAgent) => {
     setDeliveryAgent(agent);
     setAuthMode('delivery');
     setActiveTab('delivery');
-    setOrders(getOrders());
+    await refreshOrders();
     addToast('success', `Welcome ${agent.name}! Delivery partner session active.`);
   };
 
-  const handleLogout = () => {
-    clearAllSessions();
+  const handleLogout = async () => {
+    clearAuth();
     setAuthMode('guest');
     setDeliveryAgent(null);
+    setUserProfile(DEFAULT_USER_PROFILE);
+    setSellerProfile(DEFAULT_SELLER_PROFILE);
     setCart([]);
     setOrders([]);
     setIsBuyerAccountOpen(false);
     setIsSellerAccountOpen(false);
-    addToast('info', 'Logged out successfully. Returned to promotional view.');
+    setActiveTab('store');
+    await loadStorefront();
+    addToast('info', 'Logged out successfully.');
   };
 
   const handleDeleteCustomerAccount = () => {
-    clearAllSessions();
-    const emptyProfile: UserProfile = {
-      name: '',
-      phone: '',
-      email: '',
-      savedAddresses: [],
-      defaultAddressIndex: 0,
-    };
-    setUserProfile(emptyProfile);
-    saveUserProfile(emptyProfile);
+    clearAuth();
+    setUserProfile(DEFAULT_USER_PROFILE);
     setAuthMode('guest');
     setActiveTab('store');
     setIsBuyerAccountOpen(false);
-    addToast('warning', 'Customer account permanently deleted. Returned to promotional view.');
+    loadStorefront();
+    addToast('warning', 'Signed out. (Account data remains on the server.)');
   };
 
-  // --- CART FUNCTIONS ---
+  // ---- cart ----
   const handleAddToCart = (product: Product, quantityToAdd = 1) => {
     if (authMode !== 'customer') {
       handleOpenLogin('customer');
       addToast('info', 'Please log in as a customer to add items to your cart.');
       return;
     }
-
     const maxAllowed = getMaxAllowedQuantityForDistance(product, address.estimatedDistanceKm);
     const existingIndex = cart.findIndex((item) => item.product.id === product.id);
-
     let updatedCart: CartItem[];
-
     if (existingIndex > -1) {
-      const currentQty = cart[existingIndex].quantity;
-      const newQty = currentQty + quantityToAdd;
-
+      const newQty = cart[existingIndex].quantity + quantityToAdd;
       if (newQty > maxAllowed) {
-        addToast('warning', `Limit reached! Maximum allowed quantity for ${product.name} at ${address.estimatedDistanceKm}km is ${maxAllowed} ${product.unit}s.`);
+        addToast('warning', `Limit reached! Max ${maxAllowed} ${product.unit}s of ${product.name} at ${address.estimatedDistanceKm}km.`);
         return;
       }
-
-      updatedCart = cart.map((item, idx) =>
-        idx === existingIndex ? { ...item, quantity: newQty } : item
-      );
+      updatedCart = cart.map((item, idx) => (idx === existingIndex ? { ...item, quantity: newQty } : item));
     } else {
       if (quantityToAdd > maxAllowed) {
-        addToast('warning', `Maximum allowed quantity for ${product.name} at ${address.estimatedDistanceKm}km is ${maxAllowed} ${product.unit}s.`);
+        addToast('warning', `Max ${maxAllowed} ${product.unit}s of ${product.name} at ${address.estimatedDistanceKm}km.`);
         return;
       }
-
       updatedCart = [...cart, { product, quantity: quantityToAdd }];
     }
-
     setCart(updatedCart);
-    saveCart(updatedCart);
+    saveCart(updatedCart, userProfile.phone);
     addToast('success', `Added ${quantityToAdd} ${product.unit} of ${product.name} to cart.`);
   };
 
   const handleUpdateCartQuantity = (productId: string, newQuantity: number) => {
     const targetItem = cart.find((item) => item.product.id === productId);
     if (!targetItem) return;
-
-    if (newQuantity <= 0) {
-      handleRemoveFromCart(productId);
-      return;
-    }
-
+    if (newQuantity <= 0) return handleRemoveFromCart(productId);
     const maxAllowed = getMaxAllowedQuantityForDistance(targetItem.product, address.estimatedDistanceKm);
     if (newQuantity > maxAllowed) {
-      addToast('warning', `Maximum allowed quantity for ${targetItem.product.name} at ${address.estimatedDistanceKm}km is ${maxAllowed} ${targetItem.product.unit}s.`);
+      addToast('warning', `Max ${maxAllowed} ${targetItem.product.unit}s allowed at ${address.estimatedDistanceKm}km.`);
       return;
     }
-
-    const updatedCart = cart.map((item) =>
-      item.product.id === productId ? { ...item, quantity: newQuantity } : item
-    );
+    const updatedCart = cart.map((item) => (item.product.id === productId ? { ...item, quantity: newQuantity } : item));
     setCart(updatedCart);
-    saveCart(updatedCart);
+    saveCart(updatedCart, userProfile.phone);
   };
 
   const handleRemoveFromCart = (productId: string) => {
     const updatedCart = cart.filter((item) => item.product.id !== productId);
     setCart(updatedCart);
-    saveCart(updatedCart);
+    saveCart(updatedCart, userProfile.phone);
     addToast('info', 'Item removed from cart.');
   };
 
   const handleClearCart = () => {
     setCart([]);
-    saveCart([]);
+    saveCart([], userProfile.phone);
   };
 
-  // --- ORDER HANDLERS ---
-  const handlePlaceOrder = (newOrder: Order) => {
-    createOrder(newOrder);
-    setOrders(getOrders(userProfile.phone));
-    setProducts(getProducts());
-    handleClearCart();
-    setIsCheckoutOpen(false);
-    setActiveTab('orders');
-    addToast('success', `Order ${newOrder.id} placed successfully!`);
-  };
-
-  const handleUpdateOrderStatus = (updatedOrder: Order) => {
-    updateOrder(updatedOrder);
-    if (authMode === 'seller' || authMode === 'delivery') {
-      setOrders(getOrders());
-    } else {
-      setOrders(getOrders(userProfile.phone));
+  // ---- orders ----
+  const handlePlaceOrder = async (draft: Order) => {
+    const orderAddress = draft.address || address;
+    // group cart by seller for multi-seller checkout
+    const groups: Record<string, CartItem[]> = {};
+    (draft.items || cart).forEach((it) => {
+      const sid = it.product.sellerId || 'unknown';
+      (groups[sid] ||= []).push(it);
+    });
+    try {
+      for (const [sid, items] of Object.entries(groups)) {
+        const subtotal = items.reduce((s, i) => s + i.product.price * i.quantity, 0);
+        const sample = items[0].product;
+        const dist =
+          orderAddress.latitude && sample.sellerLat
+            ? calculateKmDistance(orderAddress.latitude, orderAddress.longitude!, sample.sellerLat, sample.sellerLng)
+            : orderAddress.estimatedDistanceKm;
+        const deliveryFee = Math.round(30 + dist * 5);
+        await apiCreateOrder({
+          items,
+          subtotal,
+          deliveryFee,
+          grandTotal: subtotal + deliveryFee,
+          address: orderAddress,
+          paymentMethod: draft.paymentMethod,
+          isPaid: draft.isPaid,
+          paymentId: draft.paymentId,
+          sellerId: sid !== 'unknown' ? sid : undefined,
+          sellerName: sample.sellerName,
+        } as Partial<Order>);
+      }
+      handleClearCart();
+      setIsCheckoutOpen(false);
+      setActiveTab('orders');
+      await refreshOrders();
+      await loadStorefront();
+      const shops = Object.keys(groups).length;
+      addToast('success', shops > 1 ? `Order placed across ${shops} shops!` : 'Order placed successfully!');
+    } catch (e: any) {
+      addToast('warning', e.message || 'Could not place order.');
     }
-    // Delivery portal shows its own contextual toasts; avoid duplicate spam.
-    if (authMode !== 'delivery') {
-      addToast('info', `Order ${updatedOrder.id} status updated.`);
+  };
+
+  const handleUpdateOrderStatus = async (updatedOrder: Order) => {
+    try {
+      await updateOrderApi(updatedOrder.id, updatedOrder);
+      await refreshOrders();
+      if (authModeRef.current !== 'delivery') addToast('info', `Order ${updatedOrder.id} updated.`);
+    } catch (e: any) {
+      addToast('warning', e.message || 'Update failed.');
     }
   };
 
-  // --- SELLER PRODUCT MANAGER HANDLERS ---
-  const handleSaveProduct = (product: Product) => {
-    if (products.some((p) => p.id === product.id)) {
-      updateProduct(product);
-      addToast('success', `Updated ${product.name}!`);
-    } else {
-      addProduct(product);
-      addToast('success', `Added new product ${product.name}!`);
+  // ---- seller product management ----
+  const handleSaveProduct = async (product: Product) => {
+    try {
+      const payload = { ...product, farmName: sellerProfile.farmName || product.farmName };
+      const exists = products.some((p) => p.id === product.id);
+      if (exists) {
+        await updateProductApi(product.id, payload);
+        addToast('success', `Updated ${product.name}!`);
+      } else {
+        await apiCreateProduct(payload);
+        addToast('success', `Added new product ${product.name}!`);
+      }
+      await loadSellerProducts((sellerProfile as any).id);
+    } catch (e: any) {
+      addToast('warning', e.message || 'Could not save product.');
     }
-    setProducts(getProducts());
   };
 
-  const handleDeleteProduct = (id: string) => {
-    deleteProduct(id);
-    setProducts(getProducts());
-    addToast('info', 'Product removed from catalog.');
+  const handleDeleteProduct = async (id: string) => {
+    try {
+      await deleteProductApi(id);
+      await loadSellerProducts((sellerProfile as any).id);
+      addToast('info', 'Product removed from catalog.');
+    } catch (e: any) {
+      addToast('warning', e.message || 'Could not delete product.');
+    }
   };
 
-  // --- LOCATION & PROFILE HANDLERS ---
+  // ---- location & profile ----
   const handleSaveAddress = (newAddress: AddressDetails) => {
     setAddress(newAddress);
-    saveUserAddress(newAddress);
-    addToast('info', `Location updated: ${newAddress.pincode} (${newAddress.estimatedDistanceKm} km from farm)`);
+    saveUserAddress(newAddress, userProfile.phone);
+    const updated = {
+      ...userProfile,
+      savedAddresses: [newAddress, ...(userProfile.savedAddresses || []).filter((a) => a.streetAddress !== newAddress.streetAddress)],
+      defaultAddressIndex: 0,
+    };
+    setUserProfile(updated);
+    saveUserProfile(updated);
+    updateCustomerProfile({ savedAddresses: updated.savedAddresses, defaultAddressIndex: 0 }).catch(() => {});
+    addToast('info', `Location updated: ${newAddress.pincode} (${newAddress.estimatedDistanceKm} km)`);
   };
 
   const handleSaveUserProfile = (profile: UserProfile) => {
     setUserProfile(profile);
     saveUserProfile(profile);
-    addToast('success', 'User Profile updated successfully!');
+    updateCustomerProfile({ name: profile.name, email: profile.email, savedAddresses: profile.savedAddresses }).catch(() => {});
+    addToast('success', 'Profile updated successfully!');
   };
 
   const handleSaveSellerProfile = (profile: SellerProfile) => {
     setSellerProfile(profile);
     saveSellerProfile(profile);
-    addToast('success', 'Farm Profile updated successfully!');
+    addToast('success', 'Farm Profile updated!');
   };
 
   const activeOrdersCount = orders.filter((o) => ['Pending', 'Packing', 'Out for Delivery'].includes(o.status)).length;
@@ -364,8 +420,7 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-emerald-950 text-emerald-100 flex flex-col font-sans selection:bg-amber-400 selection:text-emerald-950">
-      
-      {/* TOAST NOTIFICATION CONTAINER */}
+      {/* TOASTS */}
       <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
         {toasts.map((toast) => (
           <div
@@ -384,17 +439,13 @@ export function App() {
               {toast.type === 'info' && <Info className="w-4 h-4 text-teal-400 shrink-0" />}
               <span>{toast.text}</span>
             </div>
-            <button
-              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
-              className="text-emerald-400 hover:text-white"
-            >
+            <button onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))} className="text-emerald-400 hover:text-white">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
         ))}
       </div>
 
-      {/* HEADER COMPONENT */}
       <Header
         authMode={authMode}
         onOpenLogin={() => handleOpenLogin('customer')}
@@ -418,10 +469,7 @@ export function App() {
         }}
       />
 
-      {/* MAIN APPLICATION BODY */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        
-        {/* 1. GUEST PROMOTIONAL HERO HOME SCREEN */}
         {authMode === 'guest' && (
           <PromotionalHero
             products={products}
@@ -430,7 +478,6 @@ export function App() {
           />
         )}
 
-        {/* 2. CUSTOMER STOREFRONT INTERFACE */}
         {authMode === 'customer' && (
           <>
             {activeTab === 'store' && (
@@ -444,28 +491,19 @@ export function App() {
                 addToCart={handleAddToCart}
               />
             )}
-
             {activeTab === 'orders' && (
-              <OrderTracker
-                orders={orders}
-                onUpdateOrder={handleUpdateOrderStatus}
-                onBackToStore={() => setActiveTab('store')}
-              />
+              <OrderTracker orders={orders} onUpdateOrder={handleUpdateOrderStatus} onBackToStore={() => setActiveTab('store')} />
             )}
-
             {activeTab === 'cart' && (
               <CartView
                 cart={cart}
                 updateQuantity={handleUpdateCartQuantity}
                 removeFromCart={handleRemoveFromCart}
                 address={address}
-                proceedToCheckout={() => {
-                  setIsCheckoutOpen(true);
-                }}
+                proceedToCheckout={() => setIsCheckoutOpen(true)}
                 onBackToStore={() => setActiveTab('store')}
               />
             )}
-
             {activeTab === 'profile' && (
               <BuyerProfileView
                 userProfile={userProfile}
@@ -473,7 +511,7 @@ export function App() {
                 orders={orders}
                 onSelectActiveAddress={(selectedAddr) => {
                   setAddress(selectedAddr);
-                  saveUserAddress(selectedAddr);
+                  saveUserAddress(selectedAddr, userProfile.phone);
                 }}
                 onLogout={handleLogout}
                 onDeleteAccount={handleDeleteCustomerAccount}
@@ -482,7 +520,6 @@ export function App() {
           </>
         )}
 
-        {/* 3. SELLER PORTAL INTERFACE */}
         {authMode === 'seller' && (
           <>
             {activeTab === 'dashboard' && (
@@ -496,13 +533,12 @@ export function App() {
                 setActiveTab={setActiveTab}
               />
             )}
-
             {activeTab === 'products' && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800">
                   <div>
-                    <h2 className="font-black text-xl text-white">Vendor Product Management</h2>
-                    <p className="text-xs text-emerald-300">Add, edit pricing, or toggle stock levels for catalog listings.</p>
+                    <h2 className="font-black text-xl text-white">My Product Catalog</h2>
+                    <p className="text-xs text-emerald-300">Add, edit pricing, or update stock for your storefront listings.</p>
                   </div>
                   <button
                     onClick={() => {
@@ -510,11 +546,11 @@ export function App() {
                       setIsProductManagerOpen(true);
                     }}
                     className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-4 py-2 rounded-xl text-xs shadow-md"
+                    data-testid="seller-add-product-btn"
                   >
                     + Add New Product
                   </button>
                 </div>
-
                 <ProductCatalog
                   products={products}
                   categories={CATEGORIES}
@@ -522,38 +558,24 @@ export function App() {
                   setSelectedCategory={setSelectedCategory}
                   searchQuery={searchQuery}
                   address={address}
-                  addToCart={handleAddToCart}
+                  addToCart={(p) => {
+                    setProductToEdit(p);
+                    setIsProductManagerOpen(true);
+                  }}
                 />
               </div>
             )}
-
-            {activeTab === 'fulfillment' && (
-              <SellerOrders
-                orders={orders}
-                onUpdateOrder={handleUpdateOrderStatus}
-              />
-            )}
-
-            {activeTab === 'policy' && (
-              <DistancePolicyConfig />
-            )}
+            {activeTab === 'fulfillment' && <SellerOrders orders={orders} onUpdateOrder={handleUpdateOrderStatus} />}
+            {activeTab === 'riders' && <RiderManager addToast={addToast} />}
+            {activeTab === 'policy' && <DistancePolicyConfig />}
           </>
         )}
 
-        {/* 4. DELIVERY PARTNER INTERFACE */}
         {authMode === 'delivery' && deliveryAgent && (
-          <DeliveryPortal
-            view={activeTab}
-            agent={deliveryAgent}
-            orders={orders}
-            onUpdateOrder={handleUpdateOrderStatus}
-            addToast={addToast}
-          />
+          <DeliveryPortal view={activeTab} agent={deliveryAgent} orders={orders} onUpdateOrder={handleUpdateOrderStatus} addToast={addToast} />
         )}
-
       </main>
 
-      {/* AUTH MODAL (LOGIN & REGISTRATION) */}
       {isAuthModalOpen && (
         <AuthModal
           isOpen={isAuthModalOpen}
@@ -564,25 +586,17 @@ export function App() {
           onSellerLoginSuccess={handleSellerLoginSuccess}
           onCustomerRegisterSuccess={(profile) => {
             handleCustomerLoginSuccess(profile);
-            addToast('success', 'Customer account registered successfully!');
+            addToast('success', 'Customer account created!');
           }}
-          onSellerRegisterSuccess={(msg) => {
-            addToast('info', msg);
-          }}
+          onSellerRegisterSuccess={(msg) => addToast('info', msg)}
           onDeliveryLoginSuccess={handleDeliveryLoginSuccess}
         />
       )}
 
-      {/* LOCATION SELECTOR MODAL */}
       {isDistanceModalOpen && (
-        <DistanceSelectorModal
-          address={address}
-          onSave={handleSaveAddress}
-          onClose={() => setIsDistanceModalOpen(false)}
-        />
+        <DistanceSelectorModal address={address} onSave={handleSaveAddress} onClose={() => setIsDistanceModalOpen(false)} />
       )}
 
-      {/* CART DRAWER (SUPPRESSED WHEN IN DEDICATED CART VIEW) */}
       {isCartOpen && (activeTab as string) !== 'cart' && (
         <CartDrawer
           isOpen={isCartOpen && (activeTab as string) !== 'cart'}
@@ -598,18 +612,10 @@ export function App() {
         />
       )}
 
-      {/* CHECKOUT MODAL */}
       {isCheckoutOpen && (
-        <CheckoutModal
-          isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
-          cart={cart}
-          address={address}
-          onOrderSuccess={handlePlaceOrder}
-        />
+        <CheckoutModal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} cart={cart} address={address} onOrderSuccess={handlePlaceOrder} />
       )}
 
-      {/* PRODUCT MANAGER MODAL */}
       {isProductManagerOpen && (
         <ProductManagerModal
           isOpen={isProductManagerOpen}
@@ -620,7 +626,6 @@ export function App() {
         />
       )}
 
-      {/* BUYER ACCOUNT MODAL */}
       {isBuyerAccountOpen && (
         <BuyerAccountModal
           isOpen={isBuyerAccountOpen}
@@ -630,13 +635,12 @@ export function App() {
           orders={orders}
           onSelectActiveAddress={(selectedAddr) => {
             setAddress(selectedAddr);
-            saveUserAddress(selectedAddr);
+            saveUserAddress(selectedAddr, userProfile.phone);
           }}
           onLogout={handleLogout}
         />
       )}
 
-      {/* SELLER ACCOUNT MODAL */}
       {isSellerAccountOpen && (
         <SellerAccountModal
           isOpen={isSellerAccountOpen}
@@ -649,14 +653,12 @@ export function App() {
         />
       )}
 
-      {/* FOOTER */}
       <footer className="bg-emerald-950/90 border-t border-emerald-800/50 py-6 text-center text-xs text-emerald-400/80">
         <div className="max-w-7xl mx-auto px-4 flex flex-wrap justify-between items-center gap-2">
-          <span>© 2026 Shroom & Veggies Farm Market • Dual-Interface React Application</span>
-          <span className="text-amber-400 font-medium">Customer 7-Day Auto-Session • Seller Tab Session Security</span>
+          <span>© 2026 Shroom & Veggies Farm Market • Multi-Seller Marketplace</span>
+          <span className="text-amber-400 font-medium">Cloud-synced • Customer · Seller · Delivery</span>
         </div>
       </footer>
-
     </div>
   );
 }

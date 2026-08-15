@@ -16,8 +16,15 @@ import {
   Bike,
   Truck
 } from 'lucide-react';
-import type { UserProfile, SellerProfile, AddressDetails, DeliveryAgent } from '../../types';
-import { findDeliveryAgent } from '../../services/storage';
+import type { UserProfile, SellerProfile, DeliveryAgent } from '../../types';
+import {
+  sellerLogin as apiSellerLogin,
+  sellerRegister as apiSellerRegister,
+  customerSendOtp as apiSendOtp,
+  customerVerifyOtp as apiVerifyOtp,
+  riderLogin as apiRiderLogin,
+  setAuth,
+} from '../../services/api';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -89,100 +96,68 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // --- HANDLERS ---
 
-  const handleSendOtp = (e: React.FormEvent) => {
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    if (!custPhone || custPhone.length < 10) {
+    if (!custPhone || custPhone.replace(/\D/g, '').length < 8) {
       setErrorMsg('Please enter a valid phone number (e.g. +91 98450 12345)');
       return;
     }
-    // Generate 6-digit OTP simulation
-    const generated = Math.floor(100000 + Math.random() * 900000).toString();
-    setSimulatedOtp(generated);
-    setCustOtp(generated); // Pre-fill for instant smooth testing
-    setOtpSent(true);
+    try {
+      const { otp } = await apiSendOtp(custPhone);
+      setSimulatedOtp(otp);
+      setCustOtp(otp);
+      setOtpSent(true);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Could not send OTP.');
+    }
   };
 
-  const handleVerifyOtp = (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    if (custOtp !== simulatedOtp && custOtp !== '123456') {
-      setErrorMsg('Invalid OTP code. Please check your SMS code.');
-      return;
+    try {
+      const { token, customer } = await apiVerifyOtp(custPhone, custOtp, regCustName || undefined);
+      setAuth(token, 'customer');
+      onCustomerLoginSuccess(customer);
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Invalid OTP code. Please check your SMS code.');
     }
-    // Success -> Create/fetch customer profile
-    const profile: UserProfile = {
-      name: regCustName || 'Valued Customer',
-      phone: custPhone,
-      email: regCustEmail || 'customer@example.com',
-      savedAddresses: [
-        {
-          fullName: regCustName || 'Valued Customer',
-          phone: custPhone,
-          streetAddress: regCustStreet || 'Flat 102, Laurel Springs Apt, Koramangala',
-          city: regCustCity || 'Bengaluru',
-          pincode: regCustPincode || '560034',
-          estimatedDistanceKm: 4.5,
-          latitude: 12.9352,
-          longitude: 77.6245,
-        }
-      ],
-      defaultAddressIndex: 0,
-    };
-    onCustomerLoginSuccess(profile);
-    onClose();
   };
 
-  const handleSellerLogin = (e: React.FormEvent) => {
+  const handleSellerLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     if (!sellerEmail || !sellerPassword) {
       setErrorMsg('Please enter both email and password.');
       return;
     }
-    // Validate email
-    if (sellerEmail.toLowerCase().includes('pending')) {
-      setErrorMsg('Access Denied: Your seller account is PENDING administrator approval.');
-      return;
+    try {
+      const { token, seller } = await apiSellerLogin(sellerEmail, sellerPassword);
+      setAuth(token, 'seller');
+      onSellerLoginSuccess(seller);
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Invalid email or password.');
     }
-
-    const profile: SellerProfile = {
-      sellerId: 'FARM-' + Math.floor(1000 + Math.random() * 9000),
-      farmName: 'ShroomValley Organic & Agro Farm',
-      ownerName: 'Ramesh Patel',
-      phone: '+91 94480 99887',
-      email: sellerEmail,
-      farmAddress: 'Survey #42, Organic Agro Belt, Sarjapur Road, Bengaluru',
-      latitude: 12.9716,
-      longitude: 77.5946,
-      organicCertNo: 'IND-ORG-2024-88192',
-      rating: 4.9,
-      establishedYear: 2018,
-    };
-
-    onSellerLoginSuccess(profile);
-    onClose();
   };
 
-  const handleDeliveryLogin = (e: React.FormEvent) => {
+  const handleDeliveryLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     if (!deliveryId || !deliveryPassword) {
       setErrorMsg('Please enter your Delivery Partner ID and password.');
       return;
     }
-    const known = findDeliveryAgent(deliveryId);
-    const agent: DeliveryAgent = known || {
-      agentId: deliveryId.trim().toUpperCase(),
-      name: 'Delivery Partner',
-      phone: '+91 90000 00000',
-      vehicle: 'Delivery Bike',
-      vehicleNumber: 'KA-00-XX-0000',
-      rating: 4.5,
-      zone: 'Bengaluru',
-    };
-    onDeliveryLoginSuccess(agent);
-    onClose();
+    try {
+      const { token, rider } = await apiRiderLogin(deliveryId, deliveryPassword);
+      setAuth(token, 'rider');
+      onDeliveryLoginSuccess(rider);
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Invalid Rider ID or password.');
+    }
   };
 
   const handleForgotPasswordSubmit = (e: React.FormEvent) => {
@@ -199,47 +174,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }, 3000);
   };
 
-  const handleCustomerRegister = (e: React.FormEvent) => {
+  const handleCustomerRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    if (!regCustName || !regCustPhone || !regCustStreet) {
-      setErrorMsg('Please complete all required fields (Name, Phone, Street Address).');
+    if (!regCustName || !regCustPhone) {
+      setErrorMsg('Please complete all required fields (Name, Phone).');
       return;
     }
-
-    const newAddress: AddressDetails = {
-      fullName: regCustName,
-      phone: regCustPhone,
-      streetAddress: regCustStreet,
-      city: regCustCity,
-      pincode: regCustPincode,
-      estimatedDistanceKm: 3.5,
-      latitude: 12.9352,
-      longitude: 77.6245,
-    };
-
-    const newProfile: UserProfile = {
-      name: regCustName,
-      phone: regCustPhone,
-      email: regCustEmail || `${regCustName.toLowerCase().replace(/\s+/g, '')}@example.com`,
-      savedAddresses: [newAddress],
-      defaultAddressIndex: 0,
-    };
-
-    onCustomerRegisterSuccess(newProfile);
-    onClose();
+    try {
+      const { otp } = await apiSendOtp(regCustPhone);
+      const { token, customer } = await apiVerifyOtp(regCustPhone, otp, regCustName, regCustEmail || undefined);
+      setAuth(token, 'customer');
+      onCustomerRegisterSuccess(customer);
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Registration failed.');
+    }
   };
 
-  const handleSellerRegister = (e: React.FormEvent) => {
+  const handleSellerRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    if (!regSellerFarm || !regSellerOwner || !regSellerEmail || !regSellerPassword || !regSellerGstin) {
-      setErrorMsg('Please complete all mandatory vendor fields (Farm Name, Owner, Email, Password, GSTIN).');
+    if (!regSellerFarm || !regSellerOwner || !regSellerEmail || !regSellerPassword) {
+      setErrorMsg('Please complete all mandatory vendor fields (Farm Name, Owner, Email, Password).');
       return;
     }
-
-    onSellerRegisterSuccess(`Vendor Registration submitted for '${regSellerFarm}'! Status: PENDING approval.`);
-    onClose();
+    try {
+      const { token, seller } = await apiSellerRegister({
+        farmName: regSellerFarm,
+        ownerName: regSellerOwner,
+        email: regSellerEmail,
+        password: regSellerPassword,
+        phone: regSellerPhone,
+        gstin: regSellerGstin,
+        organicCertNo: regSellerCert,
+      });
+      setAuth(token, 'seller');
+      onSellerRegisterSuccess(`Welcome, ${seller.farmName}! Your seller account is live.`);
+      onSellerLoginSuccess(seller);
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Vendor registration failed.');
+    }
   };
 
   return (

@@ -333,6 +333,15 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     Orders & Refunds
                   </button>
+                  <button
+                    onClick={() => setActiveTab('riders')}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      activeTab === 'riders' ? 'bg-emerald-800 text-amber-300 font-bold' : 'text-emerald-300 hover:text-white'
+                    }`}
+                    data-testid="nav-seller-riders"
+                  >
+                    Delivery Riders
+                  </button>
                 </div>
 
                 {/* Seller Profile Pill & Logout */}
