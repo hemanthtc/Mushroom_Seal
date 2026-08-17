@@ -7,16 +7,28 @@ import bcrypt
 import random
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Any, Dict
-
+from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
+MONGO_URL = os.environ.get("MONGO_URL")
+DB_NAME = os.environ.get("DB_NAME")
 
-MONGO_URL = os.environ["MONGO_URL"]
-DB_NAME = os.environ["DB_NAME"]
-JWT_SECRET = os.environ["JWT_SECRET"]
+# Fallback parsing if MONGO_URL or DB_NAME are not explicitly set
+if not MONGO_URL or not DB_NAME:
+    mongodb_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/mushroom_seal")
+    if not MONGO_URL:
+        MONGO_URL = mongodb_uri
+    if not DB_NAME:
+        try:
+            parsed_path = urlparse(mongodb_uri).path.strip("/")
+            DB_NAME = parsed_path if parsed_path else "mushroom_seal"
+        except Exception:
+            DB_NAME = "mushroom_seal"
+
+JWT_SECRET = os.environ.get("JWT_SECRET", "dev_jwt_secret_mushroom_seal_key_2026_super_secure")
 JWT_ALG = "HS256"
 TOKEN_DAYS = 7
 
@@ -165,6 +177,11 @@ async def startup():
             "sellerId": "FARM-8821",
             "created_at": now_iso(),
         })
+    else:
+        await db.sellers.update_one(
+            {"_id": existing["_id"]},
+            {"$set": {"password_hash": hash_password("Seller123")}}
+        )
     # seed a demo rider tied to the demo seller
     demo_seller = await db.sellers.find_one({"email": "ramesh.patel@shroomvalley.org"})
     if demo_seller and not await db.riders.find_one({"agentId": "RIDER-001"}):
@@ -275,6 +292,13 @@ async def update_customer(body: CustomerUpdate, request: Request):
     return clean(await db.customers.find_one({"_id": oid(a["id"])}))
 
 
+@app.delete("/api/customer")
+async def delete_customer(request: Request):
+    a = await require_role(request, "customer")
+    await db.customers.delete_one({"_id": oid(a["id"])})
+    return {"success": True}
+
+
 # ---------------- AUTH: RIDER ----------------
 @app.post("/api/auth/rider/login")
 async def rider_login(body: RiderLogin):
@@ -297,6 +321,18 @@ async def me(request: Request):
 
 
 # ---------------- SELLERS (public directory) ----------------
+@app.delete("/api/sellers/me")
+async def delete_seller(request: Request):
+    a = await require_role(request, "seller")
+    # Delete all products listed by this seller
+    await db.products.delete_many({"sellerId": a["id"]})
+    # Delete all riders registered under this seller
+    await db.riders.delete_many({"sellerId": a["id"]})
+    # Delete the seller profile itself
+    await db.sellers.delete_one({"_id": oid(a["id"])})
+    return {"success": True}
+
+
 @app.get("/api/sellers")
 async def list_sellers():
     out = []
@@ -494,3 +530,8 @@ async def delete_rider(rider_id: str, request: Request):
     a = await require_role(request, "seller")
     await db.riders.delete_one({"_id": oid(rider_id), "sellerId": a["id"]})
     return {"deleted": True}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)

@@ -209,4 +209,25 @@ router.get('/orders', authenticateToken, requireRole('CUSTOMER'), async (req, re
   }
 });
 
+/**
+ * DELETE /api/customer/profile
+ * Delete customer profile from MongoDB
+ */
+router.delete('/profile', authenticateToken, requireRole('CUSTOMER'), async (req, res) => {
+  try {
+    const customerId = req.user.customerId || req.user.id;
+    await Customer.findByIdAndDelete(customerId);
+    return res.status(200).json({
+      success: true,
+      message: 'Customer account deleted successfully.'
+    });
+  } catch (error) {
+    console.error('[Customer DELETE /profile Error]:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to delete customer account.'
+    });
+  }
+});
+
 export default router;

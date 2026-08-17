@@ -209,4 +209,25 @@ router.get('/dashboard', authenticateToken, requireRole('SELLER'), async (req, r
   }
 });
 
+/**
+ * DELETE /api/seller/profile
+ * Delete seller profile from MongoDB
+ */
+router.delete('/profile', authenticateToken, requireRole('SELLER'), async (req, res) => {
+  try {
+    const sellerId = req.user.sellerId;
+    await Seller.findOneAndDelete({ sellerId });
+    return res.status(200).json({
+      success: true,
+      message: 'Seller account deleted successfully.'
+    });
+  } catch (error) {
+    console.error('[Seller DELETE /profile Error]:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to delete seller account.'
+    });
+  }
+});
+
 export default router;

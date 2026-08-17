@@ -344,25 +344,28 @@ export const Header: React.FC<HeaderProps> = ({
                   </button>
                 </div>
 
-                {/* Seller Profile Pill & Logout */}
-                <div className="flex items-center gap-1.5 bg-emerald-900/80 rounded-xl border border-emerald-700/80 p-1">
-                  <button
-                    onClick={openAccountModal}
-                    className="flex items-center gap-1.5 text-xs font-bold text-emerald-100 hover:text-amber-300 px-2 py-1"
-                    title="Seller Account"
-                  >
-                    <Store className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="hidden lg:inline">{sellerProfile?.farmName || 'Seller Hub'}</span>
-                  </button>
+                {/* Seller Profile Button (Separate) */}
+                <button
+                  onClick={openAccountModal}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-700/80 bg-emerald-900/90 hover:bg-emerald-800 text-xs transition-all shadow-md group"
+                  title={sellerProfile?.farmName ? `${sellerProfile.farmName} - Vendor Settings` : 'Seller Account Settings'}
+                >
+                  <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-400 group-hover:bg-amber-400 group-hover:text-emerald-950 transition-colors shrink-0">
+                    <Store className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="hidden sm:inline font-semibold text-white group-hover:text-amber-300">
+                    {sellerProfile?.farmName || 'Seller Account'}
+                  </span>
+                </button>
 
-                  <button
-                    onClick={onLogout}
-                    className="p-1 text-red-400 hover:text-red-300 hover:bg-red-950/60 rounded-lg transition-colors"
-                    title="Log Out Seller Session"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
-                </div>
+                {/* Logout Button (Separate) */}
+                <button
+                  onClick={onLogout}
+                  className="p-2 text-red-400 hover:text-red-300 hover:bg-red-950/60 rounded-xl border border-emerald-800/60 transition-colors"
+                  title="Log Out Seller Session"
+                >
+                  <LogOut className="w-4 h-4 text-red-400" />
+                </button>
               </div>
             )}
 

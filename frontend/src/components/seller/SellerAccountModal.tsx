@@ -14,7 +14,8 @@ import {
   LogOut,
   Compass,
   CheckCircle2,
-  Sliders
+  Sliders,
+  AlertTriangle
 } from 'lucide-react';
 import { MapLocationPicker } from '../common/MapLocationPicker';
 
@@ -26,6 +27,7 @@ interface SellerAccountModalProps {
   products: Product[];
   orders: Order[];
   onLogout?: () => void;
+  onDeleteAccount?: () => void;
 }
 
 export const SellerAccountModal: React.FC<SellerAccountModalProps> = ({
@@ -36,9 +38,11 @@ export const SellerAccountModal: React.FC<SellerAccountModalProps> = ({
   products,
   orders,
   onLogout,
+  onDeleteAccount,
 }) => {
   const [formData, setFormData] = useState<SellerProfile>({ ...sellerProfile });
   const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [maxDeliveryRadius, setMaxDeliveryRadius] = useState<number>(25);
 
@@ -61,14 +65,6 @@ export const SellerAccountModal: React.FC<SellerAccountModalProps> = ({
       longitude: updatedAddress.longitude || prev.longitude || 77.5946,
     }));
     setIsMapPickerOpen(false);
-  };
-
-  const handleApplyZonePreset = (zoneKm: number, addressText: string) => {
-    setMaxDeliveryRadius(zoneKm);
-    setFormData((prev) => ({
-      ...prev,
-      farmAddress: `${addressText}, Sarjapur Agro Belt, Bengaluru`,
-    }));
   };
 
   return (
@@ -146,53 +142,6 @@ export const SellerAccountModal: React.FC<SellerAccountModalProps> = ({
               <Compass className="w-4 h-4 text-emerald-950 animate-spin-slow" />
               <span>Open Google Maps Precise Location Picker</span>
             </button>
-          </div>
-
-          {/* 2. QUICK ZONE PRESETS (SIMULATION) */}
-          <div className="space-y-2">
-            <label className="block text-emerald-300 font-extrabold uppercase tracking-wider text-[11px] flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-amber-400" /> Quick Zone Presets (Simulation)
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleApplyZonePreset(3.2, 'Sarjapur Road Agro Hub')}
-                className={`p-2.5 rounded-2xl border text-center transition-all ${
-                  maxDeliveryRadius === 3.2
-                    ? 'bg-amber-500 text-emerald-950 border-amber-400 shadow-md'
-                    : 'bg-emerald-900/40 border-emerald-700/80 text-emerald-200 hover:bg-emerald-800/60'
-                }`}
-              >
-                <strong className="block text-xs font-black">Zone A</strong>
-                <span className="text-[10px] block opacity-90">3.2 km (Near)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleApplyZonePreset(9.5, 'Koramangala 4th Block')}
-                className={`p-2.5 rounded-2xl border text-center transition-all ${
-                  maxDeliveryRadius === 9.5
-                    ? 'bg-amber-500 text-emerald-950 border-amber-400 shadow-md'
-                    : 'bg-emerald-900/40 border-emerald-700/80 text-emerald-200 hover:bg-emerald-800/60'
-                }`}
-              >
-                <strong className="block text-xs font-black">Zone B</strong>
-                <span className="text-[10px] block opacity-90">9.5 km (Mid)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleApplyZonePreset(18.4, 'Whitefield Main Rd')}
-                className={`p-2.5 rounded-2xl border text-center transition-all ${
-                  maxDeliveryRadius === 18.4
-                    ? 'bg-amber-500 text-emerald-950 border-amber-400 shadow-md'
-                    : 'bg-emerald-900/40 border-emerald-700/80 text-emerald-200 hover:bg-emerald-800/60'
-                }`}
-              >
-                <strong className="block text-xs font-black">Zone C</strong>
-                <span className="text-[10px] block opacity-90">18.4 km (Far)</span>
-              </button>
-            </div>
           </div>
 
           {/* 3. FARM & OWNER DETAILS */}
@@ -313,6 +262,28 @@ export const SellerAccountModal: React.FC<SellerAccountModalProps> = ({
             </div>
           </div>
 
+          {/* Danger Zone: Delete Seller Account */}
+          {onDeleteAccount && (
+            <div className="pt-3 border-t border-red-900/60 space-y-2">
+              <label className="block text-red-400 font-extrabold uppercase tracking-wider text-[11px] flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> Danger Zone
+              </label>
+              <div className="bg-red-950/40 p-3 rounded-2xl border border-red-800/80 flex items-center justify-between">
+                <div>
+                  <h4 className="font-extrabold text-xs text-white">Delete Seller Account</h4>
+                  <p className="text-[10px] text-red-300">Permanently delete your farm profile, listings, and rider assignments.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(true)}
+                  className="bg-red-600 hover:bg-red-500 text-white font-extrabold px-3.5 py-1.5 rounded-xl text-xs shadow transition-all"
+                >
+                  Delete Account
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex items-center justify-between pt-3 border-t border-emerald-800">
             {onLogout ? (
@@ -363,6 +334,47 @@ export const SellerAccountModal: React.FC<SellerAccountModalProps> = ({
             onSelectLocation={handleSelectMapLocation}
             onClose={() => setIsMapPickerOpen(false)}
           />
+        )}
+
+        {/* DELETE ACCOUNT CONFIRMATION MODAL */}
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+            <div className="bg-emerald-950 border border-red-700/80 rounded-3xl max-w-md w-full p-6 text-emerald-100 space-y-4 shadow-2xl">
+              <div className="flex items-center gap-3 text-red-400">
+                <div className="p-3 bg-red-950 rounded-2xl border border-red-800">
+                  <AlertTriangle className="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-white">Delete Seller Account Permanently?</h3>
+                  <p className="text-xs text-red-300">This action cannot be undone.</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-emerald-200 leading-relaxed bg-emerald-900/40 p-3.5 rounded-2xl border border-emerald-800">
+                Deleting your vendor account will permanently erase your farm profile, products, delivery riders, and terminate your active seller session.
+              </p>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="px-4 py-2.5 font-bold text-emerald-300 hover:text-white text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    if (onDeleteAccount) onDeleteAccount();
+                  }}
+                  className="bg-red-600 hover:bg-red-500 text-white font-extrabold px-5 py-2.5 rounded-2xl text-xs shadow-lg transition-all"
+                >
+                  Confirm Delete Seller Account
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
       </div>

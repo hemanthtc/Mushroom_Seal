@@ -20,6 +20,8 @@ import {
   createOrder as apiCreateOrder,
   updateOrderApi,
   updateCustomerProfile,
+  deleteCustomerProfile,
+  deleteSellerProfile,
   getMe,
   getToken,
   clearAuth,
@@ -241,14 +243,34 @@ export function App() {
     addToast('info', 'Logged out successfully.');
   };
 
-  const handleDeleteCustomerAccount = () => {
+  const handleDeleteCustomerAccount = async () => {
+    try {
+      await deleteCustomerProfile();
+      addToast('success', 'Customer account deleted from database.');
+    } catch (e: any) {
+      addToast('warning', e.message || 'Deleted locally.');
+    }
     clearAuth();
     setUserProfile(DEFAULT_USER_PROFILE);
     setAuthMode('guest');
     setActiveTab('store');
     setIsBuyerAccountOpen(false);
     loadStorefront();
-    addToast('warning', 'Signed out. (Account data remains on the server.)');
+  };
+
+  const handleDeleteSellerAccount = async () => {
+    try {
+      await deleteSellerProfile();
+      addToast('success', 'Seller account deleted from database.');
+    } catch (e: any) {
+      addToast('warning', e.message || 'Deleted locally.');
+    }
+    clearAuth();
+    setSellerProfile(DEFAULT_SELLER_PROFILE);
+    setAuthMode('guest');
+    setActiveTab('store');
+    setIsSellerAccountOpen(false);
+    loadStorefront();
   };
 
   // ---- cart ----
@@ -650,6 +672,7 @@ export function App() {
           products={products}
           orders={orders}
           onLogout={handleLogout}
+          onDeleteAccount={handleDeleteSellerAccount}
         />
       )}
 

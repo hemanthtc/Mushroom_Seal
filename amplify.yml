@@ -1,0 +1,19 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        # Install dependencies using npm ci (or npm install if package-lock is not updated)
+        - npm ci
+    build:
+      commands:
+        # Build the frontend assets using Vite
+        - npm run build
+  artifacts:
+    # Path to Vite's build output folder
+    baseDirectory: frontend/dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*

@@ -322,6 +322,31 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
                   />
                 </div>
 
+                {/* Detailed Event Activity Log */}
+                {selectedOrder.statusTimeline && selectedOrder.statusTimeline.length > 0 && (
+                  <div className="pt-3 border-t border-emerald-800/80 space-y-2">
+                    <span className="text-[11px] font-extrabold text-emerald-300 block uppercase tracking-wider">
+                      Step-by-Step Delivery Log
+                    </span>
+                    <div className="relative pl-4 space-y-2.5 border-l border-emerald-700/60 ml-1">
+                      {selectedOrder.statusTimeline.map((item, idx) => (
+                        <div key={idx} className="relative text-xs space-y-0.5">
+                          <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-emerald-950 shadow" />
+                          <div className="flex items-center justify-between text-[11px]">
+                            <strong className="text-white font-bold">{item.status}</strong>
+                            <span className="text-emerald-400 font-mono text-[10px]">
+                              {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          {item.note && (
+                            <p className="text-[11px] text-emerald-200/90 leading-snug">{item.note}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Cancellation & Refund Information Card */}
                 {selectedOrder.status === 'Cancelled' && (
                   <div className="bg-red-950/80 p-3.5 rounded-2xl border border-red-700/60 text-red-200 text-xs space-y-1 mt-2">

@@ -45,6 +45,10 @@ export const riderLogin = (agentId: string, password: string): Promise<{ token: 
 export const getMe = (): Promise<{ role: string; profile: any }> => req('/auth/me');
 export const updateCustomerProfile = (body: Partial<UserProfile>): Promise<UserProfile> =>
   req('/customer/profile', { method: 'PUT', body: JSON.stringify(body) });
+export const deleteCustomerProfile = (): Promise<any> =>
+  req('/customer', { method: 'DELETE' });
+export const deleteSellerProfile = (): Promise<any> =>
+  req('/sellers/me', { method: 'DELETE' });
 
 // ---- SELLERS ----
 export const getSellers = (): Promise<SellerDirectoryEntry[]> => req('/sellers');
