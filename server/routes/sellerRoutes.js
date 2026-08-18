@@ -115,7 +115,7 @@ router.post('/auth/login', async (req, res) => {
         role: 'SELLER'
       },
       secret,
-      { expiresIn: '12h' }
+      { expiresIn: '24h' }
     );
 
     return res.status(200).json({

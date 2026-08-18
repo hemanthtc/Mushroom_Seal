@@ -70,6 +70,7 @@ router.post('/auth/send-otp', otpRateLimiter, async (req, res) => {
       success: true,
       message: `OTP sent successfully to ${phoneNumber}`,
       // Return simulated OTP in dev mode for convenient testing
+      otp: process.env.NODE_ENV !== 'production' ? generatedOtp : undefined,
       debugOtp: process.env.NODE_ENV !== 'production' ? generatedOtp : undefined
     });
   } catch (error) {
@@ -161,7 +162,7 @@ router.post('/auth/verify-otp', async (req, res) => {
         customerId: customer._id
       },
       secret,
-      { expiresIn: '30d' }
+      { expiresIn: '365d' }
     );
 
     return res.status(200).json({

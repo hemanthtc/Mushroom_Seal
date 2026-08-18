@@ -24,6 +24,8 @@ import {
   customerVerifyOtp as apiVerifyOtp,
   riderLogin as apiRiderLogin,
   setAuth,
+  sellerForgotPassword,
+  updateCustomerProfile,
 } from '../../services/api';
 
 interface AuthModalProps {
@@ -71,6 +73,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [isForgotLoading, setIsForgotLoading] = useState(false);
 
   // Customer Registration States
   const [regCustName, setRegCustName] = useState('');
@@ -79,6 +82,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regCustStreet, setRegCustStreet] = useState('');
   const [regCustCity, setRegCustCity] = useState('Bengaluru');
   const [regCustPincode, setRegCustPincode] = useState('560034');
+  const [regOtpSent, setRegOtpSent] = useState(false);
+  const [regSimulatedOtp, setRegSimulatedOtp] = useState('');
+  const [regOtpVal, setRegOtpVal] = useState('');
 
   // Seller Registration States
   const [regSellerFarm, setRegSellerFarm] = useState('');
@@ -160,18 +166,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleForgotPasswordSubmit = (e: React.FormEvent) => {
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     if (!forgotEmail) {
       setErrorMsg('Please enter your registered seller email address.');
       return;
     }
-    setForgotSuccess(true);
-    setTimeout(() => {
-      setIsForgotPassword(false);
-      setForgotSuccess(false);
-    }, 3000);
+    setIsForgotLoading(true);
+    try {
+      const res = await sellerForgotPassword(forgotEmail);
+      if (res.success) {
+        setForgotSuccess(true);
+      } else {
+        setErrorMsg(res.message || 'Failed to send recovery link.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to send recovery link.');
+    } finally {
+      setIsForgotLoading(false);
+    }
   };
 
   const handleCustomerRegister = async (e: React.FormEvent) => {
@@ -183,12 +197,51 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
     try {
       const { otp } = await apiSendOtp(regCustPhone);
-      const { token, customer } = await apiVerifyOtp(regCustPhone, otp, regCustName, regCustEmail || undefined);
+      setRegSimulatedOtp(otp || '');
+      setRegOtpVal(otp || '');
+      setRegOtpSent(true);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Could not send OTP.');
+    }
+  };
+
+  const handleCustomerRegisterVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    if (!regOtpVal) {
+      setErrorMsg('Please enter the 6-digit OTP code.');
+      return;
+    }
+    try {
+      const { token, customer } = await apiVerifyOtp(regCustPhone, regOtpVal, regCustName, regCustEmail || undefined);
       setAuth(token, 'customer');
-      onCustomerRegisterSuccess(customer);
+
+      // Attempt to update backend customer profile with registration address
+      const registeredAddress = {
+        fullName: regCustName,
+        phone: regCustPhone,
+        streetAddress: regCustStreet,
+        city: regCustCity,
+        pincode: regCustPincode,
+        estimatedDistanceKm: 5,
+      };
+
+      let finalCustomer = customer;
+      try {
+        finalCustomer = await updateCustomerProfile({
+          name: regCustName,
+          email: regCustEmail,
+          savedAddresses: [registeredAddress],
+          defaultAddressIndex: 0
+        });
+      } catch {
+        // Fallback for Express backend where profile update endpoint does not exist
+      }
+
+      onCustomerRegisterSuccess(finalCustomer);
       onClose();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Registration failed.');
+      setErrorMsg(err.message || 'Invalid OTP code. Registration failed.');
     }
   };
 
@@ -381,9 +434,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                     <button
                       type="submit"
-                      className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-5 py-2.5 rounded-xl shadow-lg"
+                      disabled={isForgotLoading}
+                      className={`bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-5 py-2.5 rounded-xl shadow-lg ${isForgotLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      Send Recovery Link
+                      {isForgotLoading ? 'Sending...' : 'Send Recovery Link'}
                     </button>
                   </div>
                 </>
@@ -608,85 +662,131 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <>
                   {/* CUSTOMER REGISTRATION */}
                   {roleTab === 'customer' && (
-                    <form onSubmit={handleCustomerRegister} className="space-y-3">
-                      <div>
-                        <label className="block text-emerald-300 font-bold mb-1">Full Name *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="Anish Sharma"
-                          value={regCustName}
-                          onChange={(e) => setRegCustName(e.target.value)}
-                          className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
+                    !regOtpSent ? (
+                      <form onSubmit={handleCustomerRegister} className="space-y-3">
                         <div>
-                          <label className="block text-emerald-300 font-bold mb-1">Mobile Phone *</label>
+                          <label className="block text-emerald-300 font-bold mb-1">Full Name *</label>
                           <input
                             type="text"
                             required
-                            placeholder="+91 98765 43210"
-                            value={regCustPhone}
-                            onChange={(e) => setRegCustPhone(e.target.value)}
+                            placeholder="Anish Sharma"
+                            value={regCustName}
+                            onChange={(e) => setRegCustName(e.target.value)}
                             className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
                           />
                         </div>
 
-                        <div>
-                          <label className="block text-emerald-300 font-bold mb-1">Email Address</label>
-                          <input
-                            type="email"
-                            placeholder="anish@example.com"
-                            value={regCustEmail}
-                            onChange={(e) => setRegCustEmail(e.target.value)}
-                            className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
-                          />
-                        </div>
-                      </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-emerald-300 font-bold mb-1">Mobile Phone *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="+91 98765 43210"
+                              value={regCustPhone}
+                              onChange={(e) => setRegCustPhone(e.target.value)}
+                              className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
+                            />
+                          </div>
 
-                      <div>
-                        <label className="block text-emerald-300 font-bold mb-1">Street Address *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="Flat 102, Green Park Avenue"
-                          value={regCustStreet}
-                          onChange={(e) => setRegCustStreet(e.target.value)}
-                          className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-emerald-300 font-bold mb-1">City</label>
-                          <input
-                            type="text"
-                            value={regCustCity}
-                            onChange={(e) => setRegCustCity(e.target.value)}
-                            className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
-                          />
+                          <div>
+                            <label className="block text-emerald-300 font-bold mb-1">Email Address</label>
+                            <input
+                              type="email"
+                              placeholder="anish@example.com"
+                              value={regCustEmail}
+                              onChange={(e) => setRegCustEmail(e.target.value)}
+                              className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
+                            />
+                          </div>
                         </div>
 
                         <div>
-                          <label className="block text-emerald-300 font-bold mb-1">Pincode</label>
+                          <label className="block text-emerald-300 font-bold mb-1">Street Address *</label>
                           <input
                             type="text"
-                            value={regCustPincode}
-                            onChange={(e) => setRegCustPincode(e.target.value)}
+                            required
+                            placeholder="Flat 102, Green Park Avenue"
+                            value={regCustStreet}
+                            onChange={(e) => setRegCustStreet(e.target.value)}
                             className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
                           />
                         </div>
-                      </div>
 
-                      <button
-                        type="submit"
-                        className="w-full bg-amber-500 hover:bg-amber-400 text-emerald-950 font-black py-3 rounded-xl shadow-lg text-xs mt-2"
-                      >
-                        Create Customer Account
-                      </button>
-                    </form>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-emerald-300 font-bold mb-1">City</label>
+                            <input
+                              type="text"
+                              value={regCustCity}
+                              onChange={(e) => setRegCustCity(e.target.value)}
+                              className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-emerald-300 font-bold mb-1">Pincode</label>
+                            <input
+                              type="text"
+                              value={regCustPincode}
+                              onChange={(e) => setRegCustPincode(e.target.value)}
+                              className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full bg-amber-500 hover:bg-amber-400 text-emerald-950 font-black py-3 rounded-xl shadow-lg text-xs mt-2"
+                        >
+                          Create Customer Account
+                        </button>
+                      </form>
+                    ) : (
+                      <form onSubmit={handleCustomerRegisterVerify} className="space-y-4">
+                        <div className="bg-amber-500/10 border border-amber-500/40 p-3 rounded-2xl text-center space-y-1">
+                          <span className="text-emerald-300 text-[11px]">OTP Sent to <strong className="text-white">{regCustPhone}</strong></span>
+                          {regSimulatedOtp && (
+                            <div className="bg-amber-400 text-emerald-950 font-mono font-black text-xs px-2.5 py-1 rounded-lg inline-block">
+                              Simulated SMS Code: {regSimulatedOtp}
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-emerald-300 font-bold mb-1">Enter 6-Digit Verification Code</label>
+                          <div className="relative">
+                            <KeyRound className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                            <input
+                              type="text"
+                              maxLength={6}
+                              required
+                              placeholder="123456"
+                              value={regOtpVal}
+                              onChange={(e) => setRegOtpVal(e.target.value)}
+                              className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono font-bold text-center tracking-widest text-sm focus:ring-2 focus:ring-amber-400"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setRegOtpSent(false)}
+                            className="w-1/3 bg-emerald-900 hover:bg-emerald-800 text-emerald-300 font-bold py-2.5 rounded-xl text-xs border border-emerald-700"
+                          >
+                            Back to Form
+                          </button>
+
+                          <button
+                            type="submit"
+                            className="w-2/3 bg-amber-500 hover:bg-amber-400 text-emerald-950 font-black py-2.5 rounded-xl shadow-lg text-xs"
+                          >
+                            Verify & Register
+                          </button>
+                        </div>
+                      </form>
+                    )
                   )}
 
                   {/* SELLER REGISTRATION */}

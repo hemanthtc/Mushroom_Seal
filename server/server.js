@@ -39,6 +39,11 @@ app.get('/api/health', (req, res) => {
 app.use('/api/customer', customerRoutes);
 app.use('/api/seller', sellerRoutes);
 
+// App version endpoint (for silent client-side update check)
+app.get('/api/version', (req, res) => {
+  res.status(200).json({ version: '1.1.0' });
+});
+
 // Static File Deployment & Dual SPA Fallback Routing
 // --------------------------------------------------
 // Customer portal build directory: client-dist (or fallback to dist)
@@ -51,14 +56,23 @@ const sellerDistPath = fs.existsSync(path.join(projectRoot, 'seller-dist'))
   ? path.join(projectRoot, 'seller-dist')
   : path.join(projectRoot, 'dist', 'seller');
 
+// Helper: set no-cache headers on index.html to prevent stale deployments
+const noCacheIndexHeaders = (res, filePath) => {
+  if (path.basename(filePath) === 'index.html') {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
+};
+
 // Serve Seller static assets at /seller
 if (fs.existsSync(sellerDistPath)) {
-  app.use('/seller', express.static(sellerDistPath));
+  app.use('/seller', express.static(sellerDistPath, { setHeaders: noCacheIndexHeaders }));
 }
 
 // Serve Customer static assets at /
 if (fs.existsSync(clientDistPath)) {
-  app.use('/', express.static(clientDistPath));
+  app.use('/', express.static(clientDistPath, { setHeaders: noCacheIndexHeaders }));
 }
 
 // SPA Routing Fallback for Seller Portal (/seller/*)

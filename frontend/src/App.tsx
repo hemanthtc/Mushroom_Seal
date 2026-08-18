@@ -25,6 +25,7 @@ import {
   getMe,
   getToken,
   clearAuth,
+  getAppVersion,
 } from './services/api';
 import {
   getCart,
@@ -43,6 +44,7 @@ import {
 import { Header } from './components/Header';
 import { PromotionalHero } from './components/landing/PromotionalHero';
 import { AuthModal } from './components/auth/AuthModal';
+import { ResetPasswordModal } from './components/auth/ResetPasswordModal';
 
 import { ProductCatalog } from './components/buyer/ProductCatalog';
 import { DistanceSelectorModal } from './components/buyer/DistanceSelectorModal';
@@ -64,6 +66,8 @@ import { DeliveryPortal } from './components/delivery/DeliveryPortal';
 
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 import '../Mushroom.css';
+
+const CLIENT_VERSION = '1.1.0';
 
 const CATEGORIES: CategoryType[] = [
   'All',
@@ -99,6 +103,9 @@ export function App() {
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [isBuyerAccountOpen, setIsBuyerAccountOpen] = useState(false);
   const [isSellerAccountOpen, setIsSellerAccountOpen] = useState(false);
+  
+  const [resetToken, setResetToken] = useState<string | null>(null);
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const authModeRef = useRef(authMode);
@@ -137,6 +144,14 @@ export function App() {
 
   // ---- initial session restore ----
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const rToken = urlParams.get('resetToken');
+    if (rToken) {
+      setResetToken(rToken);
+      setIsResetPasswordOpen(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     (async () => {
       const token = getToken();
       if (token) {
@@ -177,6 +192,7 @@ export function App() {
     })();
   }, []);
 
+
   // ---- live polling of orders (status + rider location sync) ----
   useEffect(() => {
     if (authMode === 'guest') return;
@@ -185,6 +201,44 @@ export function App() {
     }, 7000);
     return () => clearInterval(interval);
   }, [authMode]);
+
+  // ---- background version check (silent auto-update) ----
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const { version } = await getAppVersion();
+        if (version && version !== CLIENT_VERSION) {
+          addToast('info', 'A new version is available. Refreshing...');
+          setTimeout(() => window.location.reload(), 2000);
+        }
+      } catch { /* server unreachable, skip */ }
+    };
+    checkVersion();
+    const interval = setInterval(checkVersion, 15 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ---- auto-logout on expired token (401 Unauthorized) ----
+  useEffect(() => {
+    const onUnauthorized = () => {
+      if (authModeRef.current !== 'guest') {
+        clearAuth();
+        setAuthMode('guest');
+        setDeliveryAgent(null);
+        setUserProfile(DEFAULT_USER_PROFILE);
+        setSellerProfile(DEFAULT_SELLER_PROFILE);
+        setCart([]);
+        setOrders([]);
+        setIsBuyerAccountOpen(false);
+        setIsSellerAccountOpen(false);
+        setActiveTab('store');
+        loadStorefront();
+        addToast('error', 'Your session has expired. Please log in again.');
+      }
+    };
+    window.addEventListener('auth-unauthorized', onUnauthorized);
+    return () => window.removeEventListener('auth-unauthorized', onUnauthorized);
+  }, []);
 
   // ---- auth handlers ----
   const handleOpenLogin = (role: 'customer' | 'seller' | 'delivery' = 'customer') => {
@@ -612,6 +666,21 @@ export function App() {
           }}
           onSellerRegisterSuccess={(msg) => addToast('info', msg)}
           onDeliveryLoginSuccess={handleDeliveryLoginSuccess}
+        />
+      )}
+
+      {isResetPasswordOpen && resetToken && (
+        <ResetPasswordModal
+          isOpen={isResetPasswordOpen}
+          onClose={() => {
+            setIsResetPasswordOpen(false);
+            setResetToken(null);
+          }}
+          token={resetToken}
+          addToast={addToast}
+          onSuccess={() => {
+            handleOpenLogin('seller');
+          }}
         />
       )}
 

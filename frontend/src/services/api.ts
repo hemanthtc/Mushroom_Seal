@@ -23,19 +23,35 @@ async function req(path: string, options: RequestInit = {}): Promise<any> {
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${API}${path}`, { ...options, headers });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (e) {
+    throw new Error(`Server Error (${res.status}): ${text.substring(0, 100) || 'Empty response'}`);
+  }
+
   if (!res.ok) {
+    if (res.status === 401) {
+      window.dispatchEvent(new Event('auth-unauthorized'));
+    }
     const detail = data && data.detail ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : `Request failed (${res.status})`;
     throw new Error(detail);
   }
   return data;
 }
 
+export const getAppVersion = (): Promise<{ version: string }> => req('/version');
+
 // ---- AUTH ----
 export const sellerRegister = (body: any): Promise<{ token: string; seller: SellerProfile }> =>
   req('/auth/seller/register', { method: 'POST', body: JSON.stringify(body) });
 export const sellerLogin = (email: string, password: string): Promise<{ token: string; seller: SellerProfile }> =>
   req('/auth/seller/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+export const sellerForgotPassword = (email: string): Promise<{ success: boolean; message: string }> =>
+  req('/auth/seller/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+export const sellerResetPassword = (token: string, password: string): Promise<{ success: boolean; message: string }> =>
+  req('/auth/seller/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
 export const customerSendOtp = (phone: string): Promise<{ sent: boolean; otp: string }> =>
   req('/auth/customer/send-otp', { method: 'POST', body: JSON.stringify({ phone }) });
 export const customerVerifyOtp = (phone: string, otp: string, name?: string, email?: string): Promise<{ token: string; customer: UserProfile }> =>

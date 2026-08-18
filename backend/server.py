@@ -1,10 +1,18 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import dns.resolver
+dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
+dns.resolver.default_resolver.nameservers = ['8.8.8.8', '8.8.4.4']
+
 import os
 import jwt
 import bcrypt
 import random
+import secrets
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Any, Dict
 from urllib.parse import urlparse
@@ -60,10 +68,19 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_token(sub: str, role: str) -> str:
+    if role == "customer":
+        delta = timedelta(days=365)
+    elif role == "seller":
+        delta = timedelta(days=1)
+    elif role == "rider":
+        delta = timedelta(hours=8)
+    else:
+        delta = timedelta(days=7)
+
     payload = {
         "sub": sub,
         "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(days=TOKEN_DAYS),
+        "exp": datetime.now(timezone.utc) + delta,
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
@@ -205,6 +222,11 @@ async def health():
     return {"status": "ok", "time": now_iso()}
 
 
+@app.get("/api/version")
+async def get_version():
+    return {"version": "1.1.0"}
+
+
 # ---------------- AUTH: SELLER ----------------
 @app.post("/api/auth/seller/register")
 async def seller_register(body: SellerRegister):
@@ -234,6 +256,136 @@ async def seller_login(body: SellerLogin):
     return {"token": create_token(c["id"], "seller"), "seller": c}
 
 
+class ForgotPassword(BaseModel):
+    email: str
+
+
+class ResetPassword(BaseModel):
+    token: str
+    password: str
+
+
+def send_reset_email(to_email: str, token: str, origin: str) -> bool:
+    email_user = os.environ.get("EMAIL_USER")
+    email_pass = os.environ.get("EMAIL_PASS")
+    if not email_user or not email_pass:
+        print("SMTP Credentials not configured. EMAIL_USER or EMAIL_PASS missing.")
+        return False
+
+    reset_link = f"{origin}/seller?resetToken={token}"
+
+    subject = "Reset Your Shroom & Veggies Seller Password"
+    body = f"""Hello,
+
+You requested a password reset for your seller account on Shroom & Veggies.
+Please click the link below or copy and paste it into your browser to reset your password:
+
+{reset_link}
+
+This link will expire in 1 hour.
+
+If you did not request this password reset, please ignore this email.
+
+Best regards,
+Shroom & Veggies Team
+"""
+
+    msg = MIMEMultipart()
+    msg['From'] = email_user
+    msg['To'] = to_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(email_user, email_pass)
+            server.sendmail(email_user, to_email, msg.as_string())
+        print(f"Password reset email sent successfully via SSL to {to_email}")
+        return True
+    except Exception as ssl_err:
+        print(f"Failed to send email via SSL: {ssl_err}. Trying STARTTLS on 587...")
+        try:
+            with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                server.starttls()
+                server.login(email_user, email_pass)
+                server.sendmail(email_user, to_email, msg.as_string())
+            print(f"Password reset email sent successfully via STARTTLS to {to_email}")
+            return True
+        except Exception as tls_err:
+            print(f"Failed to send email via STARTTLS: {tls_err}")
+            return False
+
+
+@app.post("/api/auth/seller/forgot-password")
+async def seller_forgot_password(body: ForgotPassword, request: Request):
+    email = body.email.strip().lower()
+    seller = await db.sellers.find_one({"email": email})
+    if not seller:
+        # Return 200 with success status to prevent email enumeration attacks
+        return {"success": True, "message": "If this email is registered, a password recovery link has been sent."}
+
+    token = secrets.token_hex(20)
+    expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+
+    await db.sellers.update_one(
+        {"_id": seller["_id"]},
+        {"$set": {"reset_token": token, "reset_token_expires": expires}}
+    )
+
+    # Determine origin header
+    origin = request.headers.get("origin")
+    if not origin:
+        referer = request.headers.get("referer")
+        if referer:
+            parsed = urlparse(referer)
+            origin = f"{parsed.scheme}://{parsed.netloc}"
+        else:
+            host = request.headers.get("host")
+            if host:
+                scheme = "https" if request.headers.get("x-forwarded-proto") == "https" else "http"
+                origin = f"{scheme}://{host}"
+            else:
+                origin = "http://localhost:3000"
+
+
+    sent = send_reset_email(email, token, origin)
+    if not sent:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send password recovery email. Please check server SMTP configurations."
+        )
+
+    return {"success": True, "message": "Password recovery link has been sent to your email."}
+
+
+@app.post("/api/auth/seller/reset-password")
+async def seller_reset_password(body: ResetPassword):
+    seller = await db.sellers.find_one({"reset_token": body.token})
+    if not seller:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+
+    expiry_str = seller.get("reset_token_expires")
+    if not expiry_str:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+
+    if expiry_str.endswith("Z"):
+        expiry_str = expiry_str[:-1] + "+00:00"
+    expiry = datetime.fromisoformat(expiry_str)
+    if datetime.now(timezone.utc) > expiry:
+        raise HTTPException(status_code=400, detail="Reset token has expired.")
+
+    # Update password hash and clear reset token fields
+    await db.sellers.update_one(
+        {"_id": seller["_id"]},
+        {
+            "$set": {"password_hash": hash_password(body.password)},
+            "$unset": {"reset_token": "", "reset_token_expires": ""}
+        }
+    )
+
+    return {"success": True, "message": "Your password has been successfully reset. Please log in with your new password."}
+
+
 # ---------------- AUTH: CUSTOMER (phone OTP) ----------------
 @app.post("/api/auth/customer/send-otp")
 async def send_otp(body: SendOtp):
@@ -246,7 +398,49 @@ async def send_otp(body: SendOtp):
         {"$set": {"otp": otp, "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()}},
         upsert=True,
     )
-    # Demo: return OTP so the UI can display it (SMS is simulated)
+
+    api_key = os.environ.get("FAST2SMS_API_KEY")
+    if api_key and api_key != "your_fast2sms_api_key_here":
+        # Extract 10-digit number
+        clean_phone = phone
+        if clean_phone.startswith("+91"):
+            clean_phone = clean_phone[3:]
+        elif clean_phone.startswith("91") and len(clean_phone) > 10:
+            clean_phone = clean_phone[2:]
+        
+        clean_phone = "".join(c for c in clean_phone if c.isdigit())
+        
+        if len(clean_phone) == 10:
+            try:
+                import requests
+                url = "https://www.fast2sms.com/dev/bulkV2"
+                payload = {
+                    "route": "otp",
+                    "variables_values": otp,
+                    "numbers": clean_phone
+                }
+                headers = {
+                    "authorization": api_key,
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Cache-Control": "no-cache"
+                }
+                response = requests.post(url, data=payload, headers=headers)
+                res_data = response.json()
+                if not res_data.get("return"):
+                    print(f"Fast2SMS error response: {res_data}")
+                    raise HTTPException(status_code=500, detail=res_data.get("message", "Failed to send OTP SMS via Fast2SMS."))
+                print(f"Fast2SMS OTP sent successfully to {clean_phone}")
+            except Exception as e:
+                print(f"Error sending SMS via Fast2SMS: {e}")
+                if isinstance(e, HTTPException):
+                    raise e
+                raise HTTPException(status_code=500, detail=f"SMS Gateway Error: {str(e)}")
+        else:
+            raise HTTPException(status_code=400, detail="Invalid Indian phone number. Must contain 10 digits after country code.")
+
+    # Only return OTP to frontend for testing if no active API key is set
+    if api_key and api_key != "your_fast2sms_api_key_here":
+        return {"sent": True}
     return {"sent": True, "otp": otp}
 
 
