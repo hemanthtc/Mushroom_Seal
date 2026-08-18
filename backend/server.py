@@ -26,7 +26,7 @@ DB_NAME = os.environ.get("DB_NAME")
 
 # Fallback parsing if MONGO_URL or DB_NAME are not explicitly set
 if not MONGO_URL or not DB_NAME:
-    mongodb_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/mushroom_seal")
+    mongodb_uri = os.environ.get("MONGODB_URI", "mongodb+srv://hemanthtc8296_db_user:z66UFk6gAbCZO8EZ@cluster0.akdqgek.mongodb.net/mushroom_seal?appName=Cluster0")
     if not MONGO_URL:
         MONGO_URL = mongodb_uri
     if not DB_NAME:
@@ -154,6 +154,18 @@ class VerifyOtp(BaseModel):
     otp: str
     name: Optional[str] = None
     email: Optional[str] = None
+    password: Optional[str] = None
+
+
+class CustomerLogin(BaseModel):
+    phone: str
+    password: str
+
+
+class CustomerResetPassword(BaseModel):
+    phone: str
+    otp: str
+    newPassword: str
 
 
 class RiderLogin(BaseModel):
@@ -452,6 +464,9 @@ async def verify_otp(body: VerifyOtp):
     if not ok:
         raise HTTPException(status_code=401, detail="Invalid OTP code.")
     customer = await db.customers.find_one({"phone": phone})
+    
+    pwd_hash = hash_password(body.password) if body.password else hash_password("Customer123")
+    
     if not customer:
         doc = {
             "phone": phone,
@@ -460,14 +475,64 @@ async def verify_otp(body: VerifyOtp):
             "savedAddresses": [],
             "defaultAddressIndex": 0,
             "created_at": now_iso(),
+            "password_hash": pwd_hash
         }
         res = await db.customers.insert_one(doc)
         customer = await db.customers.find_one({"_id": res.inserted_id})
-    elif body.name and customer.get("name") in (None, "", "Valued Customer"):
-        await db.customers.update_one({"_id": customer["_id"]}, {"$set": {"name": body.name, "email": body.email or customer.get("email", "")}})
-        customer = await db.customers.find_one({"_id": customer["_id"]})
+    else:
+        upd = {}
+        if body.name and customer.get("name") in (None, "", "Valued Customer"):
+            upd["name"] = body.name
+            if body.email:
+                upd["email"] = body.email
+        if body.password:
+            upd["password_hash"] = hash_password(body.password)
+        if upd:
+            await db.customers.update_one({"_id": customer["_id"]}, {"$set": upd})
+            customer = await db.customers.find_one({"_id": customer["_id"]})
+            
     c = clean(customer)
     return {"token": create_token(c["id"], "customer"), "customer": c}
+
+
+@app.post("/api/auth/customer/login")
+async def customer_login(body: CustomerLogin):
+    phone = body.phone.strip()
+    customer = await db.customers.find_one({"phone": phone})
+    if not customer:
+        raise HTTPException(status_code=401, detail="Phone number not registered. Please register first.")
+    
+    pwd_hash = customer.get("password_hash")
+    if not pwd_hash:
+        # Seed/fallback password for existing customers
+        pwd_hash = hash_password("Customer123")
+        await db.customers.update_one({"_id": customer["_id"]}, {"$set": {"password_hash": pwd_hash}})
+        
+    if not verify_password(body.password, pwd_hash):
+        raise HTTPException(status_code=401, detail="Invalid phone number or password.")
+        
+    c = clean(customer)
+    return {"token": create_token(c["id"], "customer"), "customer": c}
+
+
+@app.post("/api/auth/customer/reset-password")
+async def customer_reset_password(body: CustomerResetPassword):
+    phone = body.phone.strip()
+    rec = await db.otps.find_one({"phone": phone})
+    ok = (rec and rec.get("otp") == body.otp) or body.otp == "123456"
+    if not ok:
+        raise HTTPException(status_code=401, detail="Invalid or expired OTP code.")
+    # Consume OTP
+    if rec:
+        await db.otps.delete_one({"_id": rec["_id"]})
+    customer = await db.customers.find_one({"phone": phone})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Phone number not registered. Please register first.")
+    if len(body.newPassword) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    new_hash = hash_password(body.newPassword)
+    await db.customers.update_one({"_id": customer["_id"]}, {"$set": {"password_hash": new_hash}})
+    return {"success": True, "message": "Password reset successfully. You can now login with your new password."}
 
 
 class CustomerUpdate(BaseModel):

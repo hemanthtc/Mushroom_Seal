@@ -13,7 +13,7 @@ dotenv.config();
  */
 const connectDB = async () => {
   try {
-    const connStr = process.env.MONGODB_URI || 'mongodb://localhost:27017/mushroom_seal';
+    const connStr = process.env.MONGODB_URI || 'mongodb+srv://hemanthtc8296_db_user:z66UFk6gAbCZO8EZ@cluster0.akdqgek.mongodb.net/mushroom_seal?appName=Cluster0';
 
     const conn = await mongoose.connect(connStr, {
       serverSelectionTimeoutMS: 5000,

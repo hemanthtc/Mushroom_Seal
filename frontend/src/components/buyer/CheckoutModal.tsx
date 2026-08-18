@@ -13,7 +13,8 @@ import {
   User, 
   CheckCircle2,
   CreditCard,
-  Banknote
+  Banknote,
+  AlertTriangle
 } from 'lucide-react';
 import { RazorpaySimulationModal } from './RazorpaySimulationModal';
 
@@ -33,9 +34,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onOrderSuccess,
 }) => {
   const [deliveryAddress, setDeliveryAddress] = useState<AddressDetails>({ ...address });
-  const [paymentMethod, setPaymentMethod] = useState<'Razorpay' | 'COD'>('Razorpay');
+  const [paymentMethod, setPaymentMethod] = useState<'Razorpay' | 'COD'>(
+    address.estimatedDistanceKm > 30 ? 'COD' : 'Razorpay'
+  );
   const [showRazorpayModal, setShowRazorpayModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isOutOfRangeForOnline = deliveryAddress.estimatedDistanceKm > 30;
+  const isCompletelyOutOfRange = deliveryAddress.estimatedDistanceKm > 31;
 
   if (!isOpen) return null;
 
@@ -107,6 +113,30 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         {/* Modal Scrollable Body */}
         <div className="p-6 overflow-y-auto space-y-5">
           
+          {isCompletelyOutOfRange && (
+            <div className="bg-red-950/80 border border-red-800/80 text-red-200 p-3.5 rounded-2xl text-xs font-semibold flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-red-300">Out of Delivery Range</p>
+                <p className="text-[10px] text-red-200 mt-0.5">
+                  Your address is {deliveryAddress.estimatedDistanceKm} km away. We only support deliveries within a 30 km range (plus a 1 km exception grace limit). We cannot deliver this order.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!isCompletelyOutOfRange && isOutOfRangeForOnline && (
+            <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 p-3.5 rounded-2xl text-xs font-semibold flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-200">Extended Delivery Range Warning</p>
+                <p className="text-[10px] text-amber-300 mt-0.5">
+                  Your address is {deliveryAddress.estimatedDistanceKm} km away (outside our standard 30 km range, but within the 1 km exception limit). We can confirm your order directly, but **Online Payment is disabled**. You can only place this order using Cash on Delivery (COD).
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Order Summary Box */}
           <div className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800 space-y-2 text-xs">
             <h4 className="font-bold text-amber-300 uppercase tracking-wider flex items-center justify-between">
@@ -187,9 +217,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
+                disabled={isOutOfRangeForOnline}
                 onClick={() => setPaymentMethod('Razorpay')}
                 className={`p-3.5 rounded-2xl border text-left transition-all flex flex-col justify-between ${
-                  paymentMethod === 'Razorpay'
+                  isOutOfRangeForOnline
+                    ? 'opacity-40 cursor-not-allowed bg-emerald-950/20 border-emerald-900 text-emerald-500'
+                    : paymentMethod === 'Razorpay'
                     ? 'bg-emerald-800/80 border-amber-400 text-white shadow-md ring-1 ring-amber-400'
                     : 'bg-emerald-900/30 border-emerald-800 text-emerald-300 hover:bg-emerald-900/60'
                 }`}
@@ -197,17 +230,24 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-sm text-white">Razorpay Online</span>
                   <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full">
-                    RECOMMENDED
+                    {isOutOfRangeForOnline ? 'DISABLED' : 'RECOMMENDED'}
                   </span>
                 </div>
-                <p className="text-[11px] text-emerald-300 mt-1">UPI, Cards, Netbanking with instant refund guarantee</p>
+                <p className="text-[11px] text-emerald-300 mt-1">
+                  {isOutOfRangeForOnline 
+                    ? 'Unavailable for delivery distances above 30 km' 
+                    : 'UPI, Cards, Netbanking with instant refund guarantee'}
+                </p>
               </button>
 
               <button
                 type="button"
+                disabled={isCompletelyOutOfRange}
                 onClick={() => setPaymentMethod('COD')}
                 className={`p-3.5 rounded-2xl border text-left transition-all flex flex-col justify-between ${
-                  paymentMethod === 'COD'
+                  isCompletelyOutOfRange
+                    ? 'opacity-40 cursor-not-allowed bg-emerald-950/20 border-emerald-900 text-emerald-500'
+                    : paymentMethod === 'COD'
                     ? 'bg-emerald-800/80 border-amber-400 text-white shadow-md ring-1 ring-amber-400'
                     : 'bg-emerald-900/30 border-emerald-800 text-emerald-300 hover:bg-emerald-900/60'
                 }`}
@@ -247,8 +287,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             Cancel
           </button>
 
-          {paymentMethod === 'Razorpay' ? (
+          {isCompletelyOutOfRange ? (
             <button
+              disabled
+              className="bg-emerald-900/40 border border-emerald-800/80 text-emerald-600 font-extrabold px-6 py-3 rounded-2xl text-sm cursor-not-allowed flex items-center gap-1.5"
+            >
+              <AlertTriangle className="w-4 h-4 text-emerald-600" />
+              <span>Cannot Place Order (Out of Range)</span>
+            </button>
+          ) : paymentMethod === 'Razorpay' ? (
+            <button
+              disabled={isOutOfRangeForOnline}
               onClick={() => setShowRazorpayModal(true)}
               className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-extrabold px-6 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-sm transition-all transform active:scale-95"
             >

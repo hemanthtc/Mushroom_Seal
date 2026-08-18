@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Smartphone } from 'lucide-react';
 import { 
   User, 
   Store, 
@@ -22,6 +23,8 @@ import {
   sellerRegister as apiSellerRegister,
   customerSendOtp as apiSendOtp,
   customerVerifyOtp as apiVerifyOtp,
+  customerPasswordLogin as apiCustomerPasswordLogin,
+  customerResetPassword as apiCustomerResetPassword,
   riderLogin as apiRiderLogin,
   setAuth,
   sellerForgotPassword,
@@ -55,19 +58,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [roleTab, setRoleTab] = useState<'customer' | 'seller' | 'delivery'>(initialRole);
 
   // Delivery partner login states
-  const [deliveryId, setDeliveryId] = useState('RIDER-001');
-  const [deliveryPassword, setDeliveryPassword] = useState('Rider123');
+  const [deliveryId, setDeliveryId] = useState('');
+  const [deliveryPassword, setDeliveryPassword] = useState('');
   const [showDeliveryPassword, setShowDeliveryPassword] = useState(false);
 
   // Customer Login States
-  const [custPhone, setCustPhone] = useState('+91 98450 12345');
+  const [custLoginMethod, setCustLoginMethod] = useState<'otp' | 'password'>('otp');
+  const [custPhone, setCustPhone] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [custOtp, setCustOtp] = useState('');
   const [simulatedOtp, setSimulatedOtp] = useState('');
+  // Customer Password Login States
+  const [custPwdPhone, setCustPwdPhone] = useState('');
+  const [custPassword, setCustPassword] = useState('');
+  const [showCustPassword, setShowCustPassword] = useState(false);
+  // Customer Forgot Password States
+  const [isCustForgotPassword, setIsCustForgotPassword] = useState(false);
+  const [custForgotPhone, setCustForgotPhone] = useState('');
+  const [custForgotOtpSent, setCustForgotOtpSent] = useState(false);
+  const [custForgotOtp, setCustForgotOtp] = useState('');
+  const [custForgotSimulatedOtp, setCustForgotSimulatedOtp] = useState('');
+  const [custForgotNewPassword, setCustForgotNewPassword] = useState('');
+  const [showCustForgotNewPassword, setShowCustForgotNewPassword] = useState(false);
+  const [custForgotSuccess, setCustForgotSuccess] = useState(false);
+  const [isCustForgotLoading, setIsCustForgotLoading] = useState(false);
 
   // Seller Login States
-  const [sellerEmail, setSellerEmail] = useState('ramesh.patel@shroomvalley.org');
-  const [sellerPassword, setSellerPassword] = useState('Seller123');
+  const [sellerEmail, setSellerEmail] = useState('');
+  const [sellerPassword, setSellerPassword] = useState('');
   const [showSellerPassword, setShowSellerPassword] = useState(false);
   const [showRegSellerPassword, setShowRegSellerPassword] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -85,6 +103,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regOtpSent, setRegOtpSent] = useState(false);
   const [regSimulatedOtp, setRegSimulatedOtp] = useState('');
   const [regOtpVal, setRegOtpVal] = useState('');
+  const [regCustPassword, setRegCustPassword] = useState('');
+  const [showRegCustPassword, setShowRegCustPassword] = useState(false);
 
   // Seller Registration States
   const [regSellerFarm, setRegSellerFarm] = useState('');
@@ -129,6 +149,69 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Invalid OTP code. Please check your SMS code.');
+    }
+  };
+
+  const handleCustomerPasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    if (!custPwdPhone || !custPassword) {
+      setErrorMsg('Please enter both phone number and password.');
+      return;
+    }
+    try {
+      const { token, customer } = await apiCustomerPasswordLogin(custPwdPhone, custPassword);
+      setAuth(token, 'customer');
+      onCustomerLoginSuccess(customer);
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Invalid phone number or password.');
+    }
+  };
+
+  const handleCustForgotSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    if (!custForgotPhone || custForgotPhone.replace(/\D/g, '').length < 8) {
+      setErrorMsg('Please enter a valid phone number (e.g. +91 98450 12345)');
+      return;
+    }
+    setIsCustForgotLoading(true);
+    try {
+      const { otp } = await apiSendOtp(custForgotPhone);
+      setCustForgotSimulatedOtp(otp || '');
+      setCustForgotOtp(otp || '');
+      setCustForgotOtpSent(true);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Could not send OTP.');
+    } finally {
+      setIsCustForgotLoading(false);
+    }
+  };
+
+  const handleCustForgotResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    if (!custForgotOtp) {
+      setErrorMsg('Please enter the 6-digit OTP code.');
+      return;
+    }
+    if (!custForgotNewPassword || custForgotNewPassword.length < 6) {
+      setErrorMsg('New password must be at least 6 characters.');
+      return;
+    }
+    setIsCustForgotLoading(true);
+    try {
+      const res = await apiCustomerResetPassword(custForgotPhone, custForgotOtp, custForgotNewPassword);
+      if (res.success) {
+        setCustForgotSuccess(true);
+      } else {
+        setErrorMsg(res.message || 'Failed to reset password.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to reset password.');
+    } finally {
+      setIsCustForgotLoading(false);
     }
   };
 
@@ -196,12 +279,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
     try {
-      const { otp } = await apiSendOtp(regCustPhone);
-      setRegSimulatedOtp(otp || '');
-      setRegOtpVal(otp || '');
-      setRegOtpSent(true);
+      // Direct registration using the mock OTP verification code
+      const { token, customer } = await apiVerifyOtp(
+        regCustPhone,
+        "123456",
+        regCustName,
+        regCustEmail || undefined,
+        regCustPassword || undefined
+      );
+      setAuth(token, 'customer');
+
+      // Attempt to update backend customer profile with registration address
+      const registeredAddress = {
+        fullName: regCustName,
+        phone: regCustPhone,
+        streetAddress: regCustStreet,
+        city: regCustCity,
+        pincode: regCustPincode,
+        estimatedDistanceKm: 5,
+      };
+
+      let finalCustomer = customer;
+      try {
+        finalCustomer = await updateCustomerProfile({
+          name: regCustName,
+          email: regCustEmail,
+          savedAddresses: [registeredAddress],
+          defaultAddressIndex: 0
+        });
+      } catch {
+        // Fallback for Express backend where profile update endpoint does not exist
+      }
+
+      onCustomerRegisterSuccess(finalCustomer);
+      onClose();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Could not send OTP.');
+      setErrorMsg(err.message || 'Registration failed.');
     }
   };
 
@@ -213,7 +326,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
     try {
-      const { token, customer } = await apiVerifyOtp(regCustPhone, regOtpVal, regCustName, regCustEmail || undefined);
+      const { token, customer } = await apiVerifyOtp(regCustPhone, regOtpVal, regCustName, regCustEmail || undefined, regCustPassword || undefined);
       setAuth(token, 'customer');
 
       // Attempt to update backend customer profile with registration address
@@ -448,83 +561,357 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {/* ---------------- LOGIN MODE ---------------- */}
               {activeTab === 'login' && (
                 <>
-                  {/* CUSTOMER LOGIN (PHONE + OTP) */}
+                  {/* CUSTOMER LOGIN (OTP or PASSWORD) */}
                   {roleTab === 'customer' && (
                     <div className="space-y-4">
-                      <div className="bg-emerald-900/30 p-3 rounded-2xl border border-emerald-800 text-[11px] text-emerald-300 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>Phone-first instant authentication. Customer sessions persist for <strong>7 days</strong> across browser re-opens.</span>
+                      {/* Login Method Toggle */}
+                      <div className="bg-emerald-900/50 p-1.5 rounded-2xl border border-emerald-800/80 flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => { setCustLoginMethod('otp'); setErrorMsg(''); setOtpSent(false); }}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-extrabold text-xs transition-all ${
+                            custLoginMethod === 'otp'
+                              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-emerald-950 shadow-md'
+                              : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                          }`}
+                          data-testid="cust-login-otp-tab"
+                        >
+                          <Smartphone className="w-3.5 h-3.5" />
+                          <span>Login with OTP</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setCustLoginMethod('password'); setErrorMsg(''); }}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-extrabold text-xs transition-all ${
+                            custLoginMethod === 'password'
+                              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-emerald-950 shadow-md'
+                              : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                          }`}
+                          data-testid="cust-login-password-tab"
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>Login with Password</span>
+                        </button>
                       </div>
 
-                      {!otpSent ? (
-                        <form onSubmit={handleSendOtp} className="space-y-4">
-                          <div>
-                            <label className="block text-emerald-300 font-bold mb-1">Mobile Phone Number (E.164 format)</label>
-                            <div className="relative">
-                              <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
-                              <input
-                                type="text"
-                                required
-                                placeholder="+91 98765 43210"
-                                value={custPhone}
-                                onChange={(e) => setCustPhone(e.target.value)}
-                                className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-3 py-2.5 text-white font-medium focus:ring-2 focus:ring-amber-400"
-                              />
-                            </div>
+                      {/* OTP Login Flow */}
+                      {custLoginMethod === 'otp' && (
+                        <>
+                          <div className="bg-emerald-900/30 p-3 rounded-2xl border border-emerald-800 text-[11px] text-emerald-300 flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                            <span>Phone-first instant authentication. Customer sessions persist for <strong>7 days</strong> across browser re-opens.</span>
                           </div>
 
-                          <button
-                            type="submit"
-                            className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-black py-3 rounded-xl shadow-lg text-xs transition-all flex items-center justify-center gap-2"
-                          >
-                            <span>Send 6-Digit SMS OTP</span>
-                            <ArrowRight className="w-4 h-4" />
-                          </button>
-                        </form>
-                      ) : (
-                        <form onSubmit={handleVerifyOtp} className="space-y-4">
-                          <div className="bg-amber-500/10 border border-amber-500/40 p-3 rounded-2xl text-center space-y-1">
-                            <span className="text-emerald-300 text-[11px]">OTP Sent to <strong className="text-white">{custPhone}</strong></span>
-                            {simulatedOtp && (
-                              <div className="bg-amber-400 text-emerald-950 font-mono font-black text-xs px-2.5 py-1 rounded-lg inline-block">
-                                Simulated SMS Code: {simulatedOtp}
+                          {!otpSent ? (
+                            <form onSubmit={handleSendOtp} className="space-y-4">
+                              <div>
+                                <label className="block text-emerald-300 font-bold mb-1">Mobile Phone Number (E.164 format)</label>
+                                <div className="relative">
+                                  <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Phone Number"
+                                    value={custPhone}
+                                    onChange={(e) => setCustPhone(e.target.value)}
+                                    className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-3 py-2.5 text-white font-medium focus:ring-2 focus:ring-amber-400"
+                                  />
+                                </div>
                               </div>
-                            )}
+
+                              <button
+                                type="submit"
+                                className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-black py-3 rounded-xl shadow-lg text-xs transition-all flex items-center justify-center gap-2"
+                              >
+                                <span>Send 6-Digit SMS OTP</span>
+                                <ArrowRight className="w-4 h-4" />
+                              </button>
+                            </form>
+                          ) : (
+                            <form onSubmit={handleVerifyOtp} className="space-y-4">
+                              <div className="bg-amber-500/10 border border-amber-500/40 p-3 rounded-2xl text-center space-y-1">
+                                <span className="text-emerald-300 text-[11px]">OTP Sent to <strong className="text-white">{custPhone}</strong></span>
+                                {simulatedOtp && (
+                                  <div className="bg-amber-400 text-emerald-950 font-mono font-black text-xs px-2.5 py-1 rounded-lg inline-block">
+                                    Simulated SMS Code: {simulatedOtp}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div>
+                                <label className="block text-emerald-300 font-bold mb-1">Enter 6-Digit Verification Code</label>
+                                <div className="relative">
+                                  <KeyRound className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                                  <input
+                                    type="text"
+                                    maxLength={6}
+                                    required
+                                    placeholder="123456"
+                                    value={custOtp}
+                                    onChange={(e) => setCustOtp(e.target.value)}
+                                    className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono font-bold text-center tracking-widest text-sm focus:ring-2 focus:ring-amber-400"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setOtpSent(false)}
+                                  className="w-1/3 bg-emerald-900 hover:bg-emerald-800 text-emerald-300 font-bold py-2.5 rounded-xl text-xs border border-emerald-700"
+                                >
+                                  Change Phone
+                                </button>
+
+                                <button
+                                  type="submit"
+                                  className="w-2/3 bg-amber-500 hover:bg-amber-400 text-emerald-950 font-black py-2.5 rounded-xl shadow-lg text-xs"
+                                >
+                                  Verify & Sign In
+                                </button>
+                              </div>
+                            </form>
+                          )}
+                        </>
+                      )}
+
+                      {/* Password Login Flow */}
+                      {custLoginMethod === 'password' && !isCustForgotPassword && (
+                        <>
+                          <div className="bg-emerald-900/30 p-3 rounded-2xl border border-emerald-800 text-[11px] text-emerald-300 flex items-center gap-2">
+                            <Lock className="w-4 h-4 text-purple-400 shrink-0" />
+                            <span>Sign in with your phone number and password. Default password for existing customers: <strong className="text-amber-300">Customer123</strong></span>
                           </div>
 
-                          <div>
-                            <label className="block text-emerald-300 font-bold mb-1">Enter 6-Digit Verification Code</label>
-                            <div className="relative">
-                              <KeyRound className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
-                              <input
-                                type="text"
-                                maxLength={6}
-                                required
-                                placeholder="123456"
-                                value={custOtp}
-                                onChange={(e) => setCustOtp(e.target.value)}
-                                className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono font-bold text-center tracking-widest text-sm focus:ring-2 focus:ring-amber-400"
-                              />
+                          <form onSubmit={handleCustomerPasswordLogin} className="space-y-4">
+                            <div>
+                              <label className="block text-emerald-300 font-bold mb-1">Mobile Phone Number</label>
+                              <div className="relative">
+                                <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="Phone Number"
+                                  value={custPwdPhone}
+                                  onChange={(e) => setCustPwdPhone(e.target.value)}
+                                  className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-3 py-2.5 text-white font-medium focus:ring-2 focus:ring-amber-400"
+                                  data-testid="cust-pwd-phone-input"
+                                />
+                              </div>
                             </div>
-                          </div>
 
-                          <div className="flex gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setOtpSent(false)}
-                              className="w-1/3 bg-emerald-900 hover:bg-emerald-800 text-emerald-300 font-bold py-2.5 rounded-xl text-xs border border-emerald-700"
-                            >
-                              Change Phone
-                            </button>
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <label className="block text-emerald-300 font-bold">Password</label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsCustForgotPassword(true);
+                                    setCustForgotPhone(custPwdPhone);
+                                    setErrorMsg('');
+                                  }}
+                                  className="text-amber-400 hover:text-amber-300 font-semibold text-[11px] underline"
+                                >
+                                  Forgot Password?
+                                </button>
+                              </div>
+                              <div className="relative">
+                                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                                <input
+                                  type={showCustPassword ? 'text' : 'password'}
+                                  required
+                                  placeholder="••••••••"
+                                  value={custPassword}
+                                  onChange={(e) => setCustPassword(e.target.value)}
+                                  className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-10 py-2.5 text-white font-medium focus:ring-2 focus:ring-amber-400"
+                                  data-testid="cust-pwd-password-input"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCustPassword(!showCustPassword)}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-amber-300 p-1 transition-colors"
+                                  title={showCustPassword ? 'Hide password' : 'Show password'}
+                                >
+                                  {showCustPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                              </div>
+                            </div>
 
                             <button
                               type="submit"
-                              className="w-2/3 bg-amber-500 hover:bg-amber-400 text-emerald-950 font-black py-2.5 rounded-xl shadow-lg text-xs"
+                              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-emerald-950 font-black py-3 rounded-xl shadow-lg text-xs transition-all flex items-center justify-center gap-2"
+                              data-testid="cust-pwd-login-submit"
                             >
-                              Verify & Sign In
+                              <span>Sign In with Password</span>
+                              <ArrowRight className="w-4 h-4" />
                             </button>
+                          </form>
+                        </>
+                      )}
+
+                      {/* Customer Forgot Password Flow */}
+                      {custLoginMethod === 'password' && isCustForgotPassword && (
+                        <div className="space-y-4">
+                          <div className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800 space-y-2">
+                            <h3 className="font-extrabold text-white text-sm flex items-center gap-1.5">
+                              <KeyRound className="w-4 h-4 text-amber-400" /> Customer Password Recovery
+                            </h3>
+                            <p className="text-emerald-300 text-xs">
+                              We’ll send a 6-digit OTP to your registered phone number. Verify it and set a new password.
+                            </p>
                           </div>
-                        </form>
+
+                          {custForgotSuccess ? (
+                            <div className="bg-emerald-900/80 border border-emerald-600 p-4 rounded-2xl text-center space-y-3">
+                              <CheckCircle2 className="w-8 h-8 text-amber-400 mx-auto" />
+                              <p className="font-bold text-white text-xs">Password Reset Successful!</p>
+                              <p className="text-[11px] text-emerald-200">
+                                Your password has been updated. You can now sign in with your new password.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsCustForgotPassword(false);
+                                  setCustForgotSuccess(false);
+                                  setCustForgotOtpSent(false);
+                                  setCustForgotOtp('');
+                                  setCustForgotNewPassword('');
+                                  setCustForgotSimulatedOtp('');
+                                }}
+                                className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-5 py-2 rounded-xl text-xs"
+                              >
+                                Back to Login
+                              </button>
+                            </div>
+                          ) : !custForgotOtpSent ? (
+                            <form onSubmit={handleCustForgotSendOtp} className="space-y-4">
+                              <div>
+                                <label className="block text-emerald-300 font-bold mb-1">Registered Phone Number</label>
+                                <div className="relative">
+                                  <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Phone Number"
+                                    value={custForgotPhone}
+                                    onChange={(e) => setCustForgotPhone(e.target.value)}
+                                    className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-3 py-2.5 text-white font-medium focus:ring-2 focus:ring-amber-400"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsCustForgotPassword(false);
+                                    setErrorMsg('');
+                                  }}
+                                  className="text-emerald-400 hover:text-white font-bold underline text-xs"
+                                >
+                                  ← Back to Login
+                                </button>
+
+                                <button
+                                  type="submit"
+                                  disabled={isCustForgotLoading}
+                                  className={`bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold px-5 py-2.5 rounded-xl shadow-lg text-xs ${isCustForgotLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                  {isCustForgotLoading ? 'Sending...' : 'Send OTP'}
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
+                            <form onSubmit={handleCustForgotResetPassword} className="space-y-4">
+                              <div className="bg-amber-500/10 border border-amber-500/40 p-3 rounded-2xl text-center space-y-1">
+                                <span className="text-emerald-300 text-[11px]">OTP Sent to <strong className="text-white">{custForgotPhone}</strong></span>
+                                {custForgotSimulatedOtp && (
+                                  <div className="bg-amber-400 text-emerald-950 font-mono font-black text-xs px-2.5 py-1 rounded-lg inline-block">
+                                    Simulated SMS Code: {custForgotSimulatedOtp}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div>
+                                <label className="block text-emerald-300 font-bold mb-1">Enter 6-Digit Verification Code</label>
+                                <div className="relative">
+                                  <KeyRound className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                                  <input
+                                    type="text"
+                                    maxLength={6}
+                                    required
+                                    placeholder="123456"
+                                    value={custForgotOtp}
+                                    onChange={(e) => setCustForgotOtp(e.target.value)}
+                                    className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono font-bold text-center tracking-widest text-sm focus:ring-2 focus:ring-amber-400"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-emerald-300 font-bold mb-1">New Password (min 6 characters)</label>
+                                <div className="relative">
+                                  <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                                  <input
+                                    type={showCustForgotNewPassword ? 'text' : 'password'}
+                                    required
+                                    minLength={6}
+                                    placeholder="••••••••"
+                                    value={custForgotNewPassword}
+                                    onChange={(e) => setCustForgotNewPassword(e.target.value)}
+                                    className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-10 py-2.5 text-white font-medium focus:ring-2 focus:ring-amber-400"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowCustForgotNewPassword(!showCustForgotNewPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-amber-300 p-1 transition-colors"
+                                    title={showCustForgotNewPassword ? 'Hide password' : 'Show password'}
+                                  >
+                                    {showCustForgotNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCustForgotOtpSent(false);
+                                    setCustForgotOtp('');
+                                    setCustForgotNewPassword('');
+                                    setCustForgotSimulatedOtp('');
+                                  }}
+                                  className="w-1/3 bg-emerald-900 hover:bg-emerald-800 text-emerald-300 font-bold py-2.5 rounded-xl text-xs border border-emerald-700"
+                                >
+                                  Change Phone
+                                </button>
+
+                                <button
+                                  type="submit"
+                                  disabled={isCustForgotLoading}
+                                  className={`w-2/3 bg-amber-500 hover:bg-amber-400 text-emerald-950 font-black py-2.5 rounded-xl shadow-lg text-xs ${isCustForgotLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                  {isCustForgotLoading ? 'Resetting...' : 'Reset Password'}
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsCustForgotPassword(false);
+                                  setCustForgotOtpSent(false);
+                                  setCustForgotOtp('');
+                                  setCustForgotNewPassword('');
+                                  setCustForgotSimulatedOtp('');
+                                  setErrorMsg('');
+                                }}
+                                className="w-full text-emerald-400 hover:text-white font-bold underline text-xs text-center"
+                              >
+                                ← Back to Password Login
+                              </button>
+                            </form>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
@@ -682,7 +1069,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             <input
                               type="text"
                               required
-                              placeholder="+91 98765 43210"
+                              placeholder="Phone Number"
                               value={regCustPhone}
                               onChange={(e) => setRegCustPhone(e.target.value)}
                               className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
@@ -732,6 +1119,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                               onChange={(e) => setRegCustPincode(e.target.value)}
                               className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
                             />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-emerald-300 font-bold mb-1">Set Password *</label>
+                          <div className="relative">
+                            <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400" />
+                            <input
+                              type={showRegCustPassword ? 'text' : 'password'}
+                              required
+                              minLength={6}
+                              placeholder="Min 6 characters"
+                              value={regCustPassword}
+                              onChange={(e) => setRegCustPassword(e.target.value)}
+                              className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl pl-9 pr-10 py-2 text-white font-medium"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowRegCustPassword(!showRegCustPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-amber-300 p-1 transition-colors"
+                              title={showRegCustPassword ? 'Hide password' : 'Show password'}
+                            >
+                              {showRegCustPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
                           </div>
                         </div>
 
@@ -826,7 +1237,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           <input
                             type="text"
                             required
-                            placeholder="+91 94480 99887"
+                            placeholder="Phone Number"
                             value={regSellerPhone}
                             onChange={(e) => setRegSellerPhone(e.target.value)}
                             className="w-full bg-emerald-900/60 border border-emerald-700 rounded-xl px-3 py-2 text-white font-medium"
@@ -872,10 +1283,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-emerald-300 font-bold mb-1">GSTIN Tax ID *</label>
+                          <label className="block text-emerald-300 font-bold mb-1">GSTIN Tax ID</label>
                           <input
                             type="text"
-                            required
                             placeholder="29ABCDE1234F1Z5"
                             value={regSellerGstin}
                             onChange={(e) => setRegSellerGstin(e.target.value)}

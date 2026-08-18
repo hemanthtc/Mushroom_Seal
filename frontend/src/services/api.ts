@@ -21,24 +21,38 @@ async function req(path: string, options: RequestInit = {}): Promise<any> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(options.headers as any) };
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API}${path}`, { ...options, headers });
-  const text = await res.text();
   
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch (e) {
-    throw new Error(`Server Error (${res.status}): ${text.substring(0, 100) || 'Empty response'}`);
-  }
-
+  const res = await fetch(`${API}${path}`, { ...options, headers });
+  
   if (!res.ok) {
     if (res.status === 401) {
       window.dispatchEvent(new Event('auth-unauthorized'));
     }
-    const detail = data && data.detail ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : `Request failed (${res.status})`;
+    
+    if (res.status >= 502 && res.status <= 504) {
+      throw new Error(`Gateway Error (${res.status}): The backend server is unreachable or crashed.`);
+    }
+
+    const text = await res.text().catch(() => '');
+    let detail = '';
+    try {
+      const data = text ? JSON.parse(text) : null;
+      const rawDetail = data ? (data.detail || data.error) : null;
+      detail = rawDetail
+        ? (typeof rawDetail === 'string' ? rawDetail : JSON.stringify(rawDetail))
+        : '';
+    } catch {
+      // Fallback if parsing fails
+    }
+    
+    if (!detail) {
+      detail = text ? text.substring(0, 100) : `Request failed (${res.status})`;
+    }
     throw new Error(detail);
   }
-  return data;
+
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 export const getAppVersion = (): Promise<{ version: string }> => req('/version');
@@ -54,8 +68,12 @@ export const sellerResetPassword = (token: string, password: string): Promise<{ 
   req('/auth/seller/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
 export const customerSendOtp = (phone: string): Promise<{ sent: boolean; otp: string }> =>
   req('/auth/customer/send-otp', { method: 'POST', body: JSON.stringify({ phone }) });
-export const customerVerifyOtp = (phone: string, otp: string, name?: string, email?: string): Promise<{ token: string; customer: UserProfile }> =>
-  req('/auth/customer/verify-otp', { method: 'POST', body: JSON.stringify({ phone, otp, name, email }) });
+export const customerVerifyOtp = (phone: string, otp: string, name?: string, email?: string, password?: string): Promise<{ token: string; customer: UserProfile }> =>
+  req('/auth/customer/verify-otp', { method: 'POST', body: JSON.stringify({ phone, otp, name, email, password }) });
+export const customerPasswordLogin = (phone: string, password: string): Promise<{ token: string; customer: UserProfile }> =>
+  req('/auth/customer/login', { method: 'POST', body: JSON.stringify({ phone, password }) });
+export const customerResetPassword = (phone: string, otp: string, newPassword: string): Promise<{ success: boolean; message: string }> =>
+  req('/auth/customer/reset-password', { method: 'POST', body: JSON.stringify({ phone, otp, newPassword }) });
 export const riderLogin = (agentId: string, password: string): Promise<{ token: string; rider: DeliveryAgent }> =>
   req('/auth/rider/login', { method: 'POST', body: JSON.stringify({ agentId, password }) });
 export const getMe = (): Promise<{ role: string; profile: any }> => req('/auth/me');

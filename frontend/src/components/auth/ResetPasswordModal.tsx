@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, KeyRound, CheckCircle2, AlertTriangle, X } from 'lucide-react';
+import { Lock, KeyRound, CheckCircle2, AlertTriangle, X, Eye, EyeOff } from 'lucide-react';
 import { sellerResetPassword } from '../../services/api';
 
 interface ResetPasswordModalProps {
@@ -22,6 +22,8 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   if (!isOpen) return null;
 
@@ -107,14 +109,22 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
             <div className="relative">
               <Lock className="w-4 h-4 text-emerald-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
-                type="password"
+                type={showNewPassword ? 'text' : 'password'}
                 required
                 disabled={isLoading || isSuccess}
                 placeholder="••••••••"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full bg-emerald-900/40 border border-emerald-500/30 text-white rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all placeholder-emerald-700/60"
+                className="w-full bg-emerald-900/40 border border-emerald-500/30 text-white rounded-xl py-2.5 pl-10 pr-10 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all placeholder-emerald-700/60"
               />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-amber-300 p-1 transition-colors"
+                title={showNewPassword ? 'Hide password' : 'Show password'}
+              >
+                {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -123,14 +133,22 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
             <div className="relative">
               <Lock className="w-4 h-4 text-emerald-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
-                type="password"
+                type={showConfirmPassword ? 'text' : 'password'}
                 required
                 disabled={isLoading || isSuccess}
                 placeholder="••••••••"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-emerald-900/40 border border-emerald-500/30 text-white rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all placeholder-emerald-700/60"
+                className="w-full bg-emerald-900/40 border border-emerald-500/30 text-white rounded-xl py-2.5 pl-10 pr-10 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all placeholder-emerald-700/60"
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-amber-300 p-1 transition-colors"
+                title={showConfirmPassword ? 'Hide password' : 'Show password'}
+              >
+                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
